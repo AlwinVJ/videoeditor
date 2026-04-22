@@ -46,9 +46,12 @@ def reset_and_clear_all():
     # Clear uploaded file (UI state)
     if "uploaded_video" in st.session_state:
         del st.session_state["uploaded_video"]
+    
+    st.session_state.clear()
 
     st.success("All files cleared and reset successfully!")
-
+    
+    
     # Force UI refresh
     st.rerun()
 
@@ -66,7 +69,7 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file:
     st.subheader("Preview")
-    st.video(uploaded_file)
+    st.video(uploaded_file, width = 500)
 
     # Save file
     file_path = save_uploaded_file(uploaded_file)
@@ -90,15 +93,15 @@ if uploaded_file:
     mime_type = get_mime_type(uploaded_file)
 
     with open(file_path, "rb") as f:
-        st.download_button(
-            label="Download Uploaded Video",
-            data=f,
-            file_name=uploaded_file.name,
-            mime=mime_type
-        )
+        video_bytes = f.read()
+    st.download_button(
+        label="Download Uploaded Video",
+        data=video_bytes,
+        file_name=uploaded_file.name,
+        mime=mime_type
+    )
     
     st.subheader("Clear the uploaded files")
 
 if st.button("Reset"):
     reset_and_clear_all()
-    st.rerun()
