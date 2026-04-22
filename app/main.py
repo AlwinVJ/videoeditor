@@ -19,6 +19,9 @@ st.set_page_config(page_title="Video Background Editor", layout="wide")
 if "temp_files" not in st.session_state:
     st.session_state.temp_files = []
 
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = "uploaded_video"
+
 
 # Save uploaded file with a unique name to avoid overwriting
 def save_uploaded_file(uploaded_file):
@@ -44,11 +47,12 @@ def reset_and_clear_all():
     st.session_state.temp_files = []
 
     # Clear uploaded file (UI state)
-    if "uploaded_video" in st.session_state:
-        del st.session_state["uploaded_video"]
+    # if "uploaded_video" in st.session_state:
+    #     st.session_state.pop("Uploaded_video", None)
     
-    st.session_state.clear()
-
+    # st.session_state.clear()
+    
+    st.session_state.uploader_key = str(uuid.uuid4())
     st.success("All files cleared and reset successfully!")
     
     
@@ -61,15 +65,20 @@ def reset_and_clear_all():
 # UI
 st.title("🎬 Video Background Editor")
 
+if st.button("Reset and Clear All"):
+    reset_and_clear_all()
+
 uploaded_file = st.file_uploader(
     "Upload a video",
     type=["mp4", "mov", "avi"],
-    key = "Uploaded_video"
+    key=st.session_state.uploader_key
 )
 
 if uploaded_file:
     st.subheader("Preview")
-    st.video(uploaded_file, width = 500)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.video(uploaded_file, width=500)
 
     # Save file
     file_path = save_uploaded_file(uploaded_file)
@@ -93,7 +102,7 @@ if uploaded_file:
     mime_type = get_mime_type(uploaded_file)
 
     with open(file_path, "rb") as f:
-        video_bytes = f.read()
+        video_bytes = file_path.read_bytes()
     st.download_button(
         label="Download Uploaded Video",
         data=video_bytes,
@@ -103,5 +112,3 @@ if uploaded_file:
     
     st.subheader("Clear the uploaded files")
 
-if st.button("Reset"):
-    reset_and_clear_all()
