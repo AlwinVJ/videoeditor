@@ -1,6 +1,11 @@
+# import sys
 import streamlit as st
 from pathlib import Path
 import uuid
+from core.utils import generate_safe_filename
+
+# To import other manually packages from the project (optional)
+# sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 #Path configuration
 TEMP_DIR = Path("temp")
@@ -11,8 +16,8 @@ st.set_page_config(page_title="Video Background Editor", layout="wide")
 
 # Save uploaded file with a unique name to avoid overwriting
 def save_uploaded_file(uploaded_file):
-    unique_name = f"{uuid.uuid4()}_{uploaded_file.name}"
-    file_path = TEMP_DIR / unique_name
+    safe_name = generate_safe_filename(uploaded_file.name)
+    file_path = TEMP_DIR / safe_name
 
     with open(file_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
