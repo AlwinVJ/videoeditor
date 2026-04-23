@@ -97,7 +97,7 @@ if uploaded_file:
         output_path = TEMP_DIR / f"processed_{file_path.name}"
     
         with st.spinner("Processing video..."):
-            process_video(file_path, output_path)
+            process_video(file_path, output_path, effect)
     
         st.success("Processing complete!")
     

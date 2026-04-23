@@ -1,8 +1,9 @@
 import cv2
 from pathlib import Path
+from core.segmentation import apply_background_effect
 
 
-def process_video(input_path: Path, output_path: Path):
+def process_video(input_path: Path, output_path: Path, effect = "blur"):
     cap = cv2.VideoCapture(str(input_path))
 
     if not cap.isOpened():
@@ -25,9 +26,7 @@ def process_video(input_path: Path, output_path: Path):
         if not ret:
             break
 
-        # 🎯 Dummy processing (grayscale)
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        processed = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+        processed = apply_background_effect(frame, effect= effect)
 
         out.write(processed)
 
