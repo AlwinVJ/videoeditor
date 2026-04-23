@@ -8,8 +8,9 @@ sys.path.append(str(ROOT_DIR))
 import streamlit as st
 import uuid
 from core.utils import generate_safe_filename, clear_specific_files
+from core.video_io import process_video
 
-#Path configuration
+# Path configuration
 TEMP_DIR = Path("temp")
 TEMP_DIR.mkdir(exist_ok=True)
 
@@ -33,9 +34,11 @@ def save_uploaded_file(uploaded_file):
 
     return file_path
 
+
 # Return correct MIME type (fallback if missing).
 def get_mime_type(uploaded_file):
     return uploaded_file.type if uploaded_file.type else "application/octet-stream"
+
 
 # Clear temp files + reset UI + session state
 def reset_and_clear_all():
@@ -49,17 +52,14 @@ def reset_and_clear_all():
     # Clear uploaded file (UI state)
     # if "uploaded_video" in st.session_state:
     #     st.session_state.pop("Uploaded_video", None)
-    
+
     # st.session_state.clear()
-    
+
     st.session_state.uploader_key = str(uuid.uuid4())
     st.success("All files cleared and reset successfully!")
-    
-    
+
     # Force UI refresh
     st.rerun()
-
-
 
 
 # UI
@@ -69,9 +69,7 @@ if st.button("Reset and Clear All"):
     reset_and_clear_all()
 
 uploaded_file = st.file_uploader(
-    "Upload a video",
-    type=["mp4", "mov", "avi"],
-    key=st.session_state.uploader_key
+    "Upload a video", type=["mp4", "mov", "avi"], key=st.session_state.uploader_key
 )
 
 if uploaded_file:
@@ -85,16 +83,42 @@ if uploaded_file:
     # Track file
     if file_path not in st.session_state.temp_files:
         st.session_state.temp_files.append(file_path)
-    
+
     st.success(f"File saved: {file_path.name}")
 
     # Future-ready UI
     effect = st.selectbox(
-        "Select Effect",
-        ["None", "Blur Background", "Replace Background"]
+        "Select Effect", ["None", "Blur Background", "Replace Background"]
     )
 
     process_btn = st.button("Process Video")
+
+    if process_btn:
+        output_path = TEMP_DIR / f"processed_{file_path.name}"
+    
+        with st.spinner("Processing video..."):
+            process_video(file_path, output_path)
+    
+        st.success("Processing complete!")
+    
+        # Track output file
+        if output_path not in st.session_state.temp_files:
+            st.session_state.temp_files.append(output_path)
+    
+        # Load processed video
+        processed_bytes = output_path.read_bytes()
+    
+        st.subheader("Processed Video Preview")
+        st.video(processed_bytes)
+        
+        mime_type = "video/mp4"
+    
+        st.download_button(
+            label="Download Processed Video",
+            data=processed_bytes,
+            file_name=f"processed_{uploaded_file.name}",
+            mime=mime_type,
+        )
 
     # Download section
     st.subheader("Download (Test)")
@@ -107,8 +131,7 @@ if uploaded_file:
         label="Download Uploaded Video",
         data=video_bytes,
         file_name=uploaded_file.name,
-        mime=mime_type
+        mime=mime_type,
     )
-    
-    st.subheader("Clear the uploaded files")
 
+    st.subheader("Clear the uploaded files")
