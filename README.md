@@ -1,0 +1,1 @@
+This project focuses on building a video processing system using OpenCV to modify and replace video backgrounds. The initial phase involves implementing functionality for uploading videos and performing background transformation.
