@@ -18,13 +18,13 @@ def generate_safe_filename(original_name: str) -> str:
 
 # Delete all the files inside the temporary directory
 
-# def clear_temp_directory(temp_dir: Path):
-#     for file in temp_dir.iterdir():
-#         try:
-#             if file.is_file():
-#                 file.unlink()
-#         except Exception as e:
-#             print(f"Could not delete {file}: {e}")
+def clear_temp_directory(temp_dir: Path):
+    for file in temp_dir.iterdir():
+        try:
+            if file.is_file():
+                file.unlink()
+        except Exception as e:
+            print(f"Could not delete {file}: {e}")
             
 
 # Clear the specified files
