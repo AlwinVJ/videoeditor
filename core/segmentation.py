@@ -49,7 +49,7 @@ def apply_background_effect(frame, effect="blur", bg_image=None):
     # Effects
 
     if effect == "blur":
-        blurred = cv2.GaussianBlur(frame, (55, 55), 0)
+        blurred = cv2.GaussianBlur(frame, (155, 155), 0)
         output = np.where(condition[..., None], frame, blurred)
 
     elif effect == "replace" and bg_image is not None:
