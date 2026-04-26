@@ -70,9 +70,9 @@ if uploaded_file:
 
     # Preview original
     st.subheader("Preview")
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.video(uploaded_file, width=500)
+    col1, col2, col3 = st.columns([3, 0.5, 2])
+    with col1:
+        st.video(uploaded_file, width=800)
 
     # Save file
     file_path = save_uploaded_file(uploaded_file)
@@ -80,7 +80,8 @@ if uploaded_file:
     if file_path not in st.session_state.temp_files:
         st.session_state.temp_files.append(file_path)
 
-    st.success(f"File saved: {file_path.name}")
+    with col3:
+        st.success(f"File saved: {file_path.name}")
 
     # Effects
     effect_label = st.selectbox(
