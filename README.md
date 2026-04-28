@@ -42,7 +42,7 @@ uv run streamlit run app/main.py
 
 Deployed on Streamlit Cloud (no system dependencies required)
 
-## 📌 Future Improvements
+## Future Improvements
 
 * Real-time video processing
 * GPU acceleration
