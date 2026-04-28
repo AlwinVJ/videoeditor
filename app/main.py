@@ -3,7 +3,9 @@ from pathlib import Path
 import uuid
 
 # Fix import path
-ROOT_DIR = Path(__file__).resolve().parent.parent
+ROOT_DIR = Path(__file__).resolve().parent
+if ROOT_DIR.name == "app":
+    ROOT_DIR = ROOT_DIR.parent
 sys.path.append(str(ROOT_DIR))
 
 import streamlit as st
