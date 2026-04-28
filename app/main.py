@@ -30,6 +30,12 @@ if "uploader_key" not in st.session_state:
 if "processed_video" not in st.session_state:
     st.session_state.processed_video = None
 
+if "is_processing" not in st.session_state:
+    st.session_state.is_processing = False
+
+if "processing_complete" not in st.session_state:
+    st.session_state.processing_complete = False
+
 
 def save_uploaded_file(uploaded_file):
     safe_name = generate_safe_filename(uploaded_file.name)
@@ -110,21 +116,43 @@ if uploaded_file:
             file_bytes = np.asarray(bytearray(uploaded_bg.read()), dtype=np.uint8)
             bg_image = cv2.imdecode(file_bytes, 1)
 
-    process_btn = st.button("Process Video")
+    def start_processing():
+        st.session_state.is_processing = True
 
-    if process_btn:
-        output_path = TEMP_DIR / f"processed_{file_path.stem}.webm"
+    process_btn = st.button("Process Video", on_click=start_processing, disabled=st.session_state.is_processing)
 
-        with st.spinner("Processing video..."):
-            process_video(file_path, output_path, effect, bg_image)
-
+    if st.session_state.get("processing_complete"):
         st.success("Processing complete!")
+        st.session_state.processing_complete = False
 
-        # Save to session
-        st.session_state.processed_video = str(output_path)
+    if st.session_state.is_processing:
+        output_path = TEMP_DIR / f"processed_{file_path.stem}.mp4"
 
-        if output_path not in st.session_state.temp_files:
-            st.session_state.temp_files.append(output_path)
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        status_text.text("Processing video... 0%")
+
+        def update_progress(progress):
+            progress_bar.progress(progress)
+            status_text.text(f"Processing video... {int(progress * 100)}%")
+        
+        try:
+            with st.spinner("Making changes ..."):
+                process_video(file_path, output_path, effect, bg_image, progress_callback=update_progress)
+
+            progress_bar.empty()
+            status_text.empty()
+            st.session_state.processing_complete = True
+    
+            # Save to session
+            st.session_state.processed_video = str(output_path)
+    
+            if output_path not in st.session_state.temp_files:
+                st.session_state.temp_files.append(output_path)
+        
+        finally:
+            st.session_state.is_processing = False 
+            st.rerun()
 
     if st.session_state.processed_video:
         st.divider()
@@ -147,6 +175,6 @@ if uploaded_file:
             st.download_button(
                 label="Download Processed Video",
                 data=f,
-                file_name="processed_video.webm",
-                mime="video/webm",
+                file_name="processed_video.mp4",
+                mime="video/mp4",
             )
