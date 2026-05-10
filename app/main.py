@@ -37,6 +37,11 @@ if "is_processing" not in st.session_state:
 
 if "processing_complete" not in st.session_state:
     st.session_state.processing_complete = False
+    
+
+effect = "none"
+uploaded_bg = None
+bg_image = None
 
 
 def save_uploaded_file(uploaded_file):
@@ -75,21 +80,23 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file:
-
+    
+    # File path saved
+    file_path = save_uploaded_file(uploaded_file) 
     # Preview original
     st.subheader("Preview")
     col1, col2, col3 = st.columns([3, 0.5, 2])
     with col1:
+        st.markdown("Uploaded Video")
         st.video(uploaded_file, width=800)
+        st.success(f"File saved: {file_path.name}")
 
     # Save file
-    file_path = save_uploaded_file(uploaded_file)
+    
 
     if file_path not in st.session_state.temp_files:
         st.session_state.temp_files.append(file_path)
-
-    with col3:
-        st.success(f"File saved: {file_path.name}")
+        
 
     # Effects
     effect_label = st.selectbox(
@@ -132,6 +139,16 @@ if uploaded_file:
         if uploaded_bg:
             file_bytes = np.asarray(bytearray(uploaded_bg.read()), dtype=np.uint8)
             bg_image = cv2.imdecode(file_bytes, 1)
+    
+    # Show uploaded background preview
+        if effect == "replace" and bg_image is not None:
+            with col3:
+                st.markdown("Uploaded Image")
+                st.image(
+                    bg_image,
+                    caption=uploaded_bg.name,
+                    use_container_width=True
+                )
 
     def start_processing():
         st.session_state.is_processing = True
