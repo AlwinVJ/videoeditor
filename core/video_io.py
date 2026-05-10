@@ -6,7 +6,7 @@ from core.audio import merge_audio
 import time
 
 
-def process_video(input_path: Path, output_path: Path, effect="blur", bg_image=None, progress_callback=None):
+def process_video(input_path: Path, output_path: Path, effect="blur", bg_image=None,blur_strength = 51, progress_callback=None):
     start_time = time.time()
     # Open video
     cap = cv2.VideoCapture(str(input_path))
@@ -43,7 +43,8 @@ def process_video(input_path: Path, output_path: Path, effect="blur", bg_image=N
         processed_frame = apply_background_effect(
             frame,
             effect=effect,
-            bg_image=bg_image
+            bg_image=bg_image,
+            blur_strength=blur_strength
         )
 
         out.write(processed_frame)

@@ -105,8 +105,23 @@ if uploaded_file:
     }
 
     effect = effect_map[effect_label]
+    blur_strength = 51
     bg_image = None
     uploaded_bg = None
+    
+    if effect == "blur":
+        blur_option = st.selectbox(
+            "Blur Strength",
+            ["Light", "Medium", "Strong"]
+        )
+    
+        blur_map = {
+            "Light": 21,
+            "Medium": 51,
+            "Strong": 101
+        }
+    
+        blur_strength = blur_map[blur_option]
 
     if effect == "replace":
         uploaded_bg = st.file_uploader(
@@ -140,7 +155,7 @@ if uploaded_file:
         
         try:
             with st.spinner("Making changes ..."):
-                process_video(file_path, output_path, effect, bg_image, progress_callback=update_progress)
+                process_video(file_path, output_path, effect, bg_image,blur_strength, progress_callback=update_progress)
 
             progress_bar.empty()
             status_text.empty()
