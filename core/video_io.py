@@ -44,7 +44,8 @@ def process_video(input_path: Path, output_path: Path, effect="blur", bg_image=N
             frame,
             effect=effect,
             bg_image=bg_image,
-            blur_strength=blur_strength
+            blur_strength=blur_strength,
+            frame_count=frame_count
         )
 
         out.write(processed_frame)

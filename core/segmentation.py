@@ -18,10 +18,11 @@ options = vision.ImageSegmenterOptions(
     output_category_mask=True
 )
 
-# Create segmenter once (IMPORTANT)
+# Create segmenter once
 segmenter = vision.ImageSegmenter.create_from_options(options)
+last_mask = None
 
-def apply_background_effect(frame, effect="blur", bg_image=None, blur_strength = 51):
+def apply_background_effect(frame, effect="blur", bg_image=None, blur_strength = 51, frame_count=0,segment_every=2):
     
     scale = 0.5
 
@@ -40,14 +41,24 @@ def apply_background_effect(frame, effect="blur", bg_image=None, blur_strength =
         data=rgb_frame
     )
 
-    result = segmenter.segment(mp_image)
+    global last_mask
 
-    # Get mask
-    mask = result.category_mask.numpy_view()
+    # Segment only every N frames
+    if frame_count % segment_every == 0 or last_mask is None:
     
-    mask = cv2.resize(
-    mask,
-    (frame.shape[1], frame.shape[0]))
+        result = segmenter.segment(mp_image)
+    
+        mask = result.category_mask.numpy_view()
+    
+        mask = cv2.resize(
+            mask,
+            (frame.shape[1], frame.shape[0])
+        )
+    
+        last_mask = mask
+    
+    else:
+        mask = last_mask
 
     # Mask handling
 
