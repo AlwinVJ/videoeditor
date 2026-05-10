@@ -3,9 +3,11 @@ import shutil
 from pathlib import Path
 from core.segmentation import apply_background_effect
 from core.audio import merge_audio
+import time
 
 
 def process_video(input_path: Path, output_path: Path, effect="blur", bg_image=None, progress_callback=None):
+    start_time = time.time()
     # Open video
     cap = cv2.VideoCapture(str(input_path))
 
@@ -37,6 +39,7 @@ def process_video(input_path: Path, output_path: Path, effect="blur", bg_image=N
         frame_count += 1
 
         # Apply segmentation-based effect
+        frame_start = time.time()
         processed_frame = apply_background_effect(
             frame,
             effect=effect,
@@ -44,14 +47,21 @@ def process_video(input_path: Path, output_path: Path, effect="blur", bg_image=N
         )
 
         out.write(processed_frame)
-
+        frame_time = time.time() - frame_start
         if progress_callback and total_frames > 0:
             if frame_count % 5 == 0 or frame_count == total_frames:
                 progress_callback(min(frame_count / total_frames, 1.0))
 
         # Optional debug (remove later)
         if frame_count % 30 == 0:
-            print(f"Processed {frame_count} frames")
+            elapsed = time.time() - start_time
+            fps_processing = frame_count / elapsed
+        
+            print(
+                f"Processed {frame_count} frames | "
+                f"Avg Speed: {fps_processing:.2f} FPS | "
+                f"Last Frame: {frame_time:.3f}s"
+            )
 
     # Release resources
     cap.release()
@@ -69,5 +79,13 @@ def process_video(input_path: Path, output_path: Path, effect="blur", bg_image=N
         temp_output.unlink()
 
     # print("Video processing finished!")
+    
+    total_time = time.time() - start_time
+
+    print("\n===== PERFORMANCE REPORT =====")
+    print(f"Total Frames: {frame_count}")
+    print(f"Total Time: {total_time:.2f} sec")
+    print(f"Average FPS: {frame_count / total_time:.2f}")
+    print("==============================")
 
     return output_path

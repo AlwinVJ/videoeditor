@@ -21,9 +21,19 @@ options = vision.ImageSegmenterOptions(
 # Create segmenter once (IMPORTANT)
 segmenter = vision.ImageSegmenter.create_from_options(options)
 
-def apply_background_effect(frame, effect="blur", bg_image=None):
+def apply_background_effect(frame, effect="blur", bg_image=None, blur_strength = 51):
+    
+    scale = 0.5
+
+    small_frame = cv2.resize(
+        frame,
+        None,
+        fx=scale,
+        fy=scale
+    )
+    
     # Convert BGR → RGB
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    rgb_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
 
     mp_image = mp.Image(
         image_format=mp.ImageFormat.SRGB,
@@ -34,6 +44,10 @@ def apply_background_effect(frame, effect="blur", bg_image=None):
 
     # Get mask
     mask = result.category_mask.numpy_view()
+    
+    mask = cv2.resize(
+    mask,
+    (frame.shape[1], frame.shape[0]))
 
     # Mask handling
 
@@ -49,8 +63,36 @@ def apply_background_effect(frame, effect="blur", bg_image=None):
     # Effects
 
     if effect == "blur":
-        blurred = cv2.GaussianBlur(frame, (155, 155), 0)
-        output = np.where(condition[..., None], frame, blurred)
+
+        blur_scale = 0.25
+    
+        small_blur_frame = cv2.resize(
+            frame,
+            None,
+            fx=blur_scale,
+            fy=blur_scale
+        )
+    
+        # Make kernel odd
+        if blur_strength % 2 == 0:
+            blur_strength += 1
+    
+        blurred_small = cv2.GaussianBlur(
+            small_blur_frame,
+            (blur_strength, blur_strength),
+            0
+        )
+    
+        blurred = cv2.resize(
+            blurred_small,
+            (frame.shape[1], frame.shape[0])
+        )
+    
+        output = np.where(
+            condition[..., None],
+            frame,
+            blurred
+        )
 
     elif effect == "replace" and bg_image is not None:
         bg_image = cv2.resize(bg_image, (frame.shape[1], frame.shape[0]))
