@@ -48,7 +48,9 @@ def process_video(input_path: Path, output_path: Path, effect="blur", bg_image=N
             frame_count=frame_count
         )
 
+        write_start = time.time()
         out.write(processed_frame)
+        write_time = time.time() - write_start
         frame_time = time.time() - frame_start
         if progress_callback and total_frames > 0:
             if frame_count % 5 == 0 or frame_count == total_frames:
@@ -60,10 +62,10 @@ def process_video(input_path: Path, output_path: Path, effect="blur", bg_image=N
             fps_processing = frame_count / elapsed
         
             print(
-                f"Processed {frame_count} frames | "
-                f"Avg Speed: {fps_processing:.2f} FPS | "
-                f"Last Frame: {frame_time:.3f}s"
-            )
+            f"Processed {frame_count} frames | "
+            f"Avg Speed: {fps_processing:.2f} FPS | "
+            f"Frame: {frame_time:.3f}s | "
+            f"Write: {write_time:.3f}s")
 
     # Release resources
     cap.release()
