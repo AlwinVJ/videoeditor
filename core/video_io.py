@@ -3,7 +3,9 @@ import shutil
 from pathlib import Path
 from core.segmentation import apply_background_effect
 from core.audio import merge_audio
-import time
+from concurrent.futures import ProcessPoolExecutor
+from core.worker import process_single_frame
+import time,os
 
 
 def process_video(input_path: Path, output_path: Path, effect="blur", bg_image=None,blur_strength = 51, progress_callback=None):
@@ -22,6 +24,14 @@ def process_video(input_path: Path, output_path: Path, effect="blur", bg_image=N
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     
+    # Conservative worker count
+    cpu_count = os.cpu_count() or 4
+    max_workers = max(1, min(cpu_count - 1, 4))
+    
+    print(f"Using {max_workers} workers")
+    
+    batch_size = 8
+    
     temp_output = output_path.parent / f"temp_{output_path.name}"
 
 
@@ -31,42 +41,114 @@ def process_video(input_path: Path, output_path: Path, effect="blur", bg_image=N
 
     frame_count = 0
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+    # while True:
+    #     ret, frame = cap.read()
+    #     if not ret:
+    #         break
 
-        frame_count += 1
+    #     frame_count += 1
 
-        # Apply segmentation-based effect
-        frame_start = time.time()
-        processed_frame = apply_background_effect(
-            frame,
-            effect=effect,
-            bg_image=bg_image,
-            blur_strength=blur_strength,
-            frame_count=frame_count
-        )
+    #     # Apply segmentation-based effect
+    #     frame_start = time.time()
+    #     processed_frame = apply_background_effect(
+    #         frame,
+    #         effect=effect,
+    #         bg_image=bg_image,
+    #         blur_strength=blur_strength,
+    #         frame_count=frame_count
+    #     )
 
-        write_start = time.time()
-        out.write(processed_frame)
-        write_time = time.time() - write_start
-        frame_time = time.time() - frame_start
-        if progress_callback and total_frames > 0:
-            if frame_count % 5 == 0 or frame_count == total_frames:
-                progress_callback(min(frame_count / total_frames, 1.0))
+    #     write_start = time.time()
+    #     out.write(processed_frame)
+    #     write_time = time.time() - write_start
+    #     frame_time = time.time() - frame_start
+    #     if progress_callback and total_frames > 0:
+    #         if frame_count % 5 == 0 or frame_count == total_frames:
+    #             progress_callback(min(frame_count / total_frames, 1.0))
 
-        # Optional debug (remove later)
-        if frame_count % 30 == 0:
-            elapsed = time.time() - start_time
-            fps_processing = frame_count / elapsed
+    #     # Optional debug (remove later)
+    #     if frame_count % 30 == 0:
+    #         elapsed = time.time() - start_time
+    #         fps_processing = frame_count / elapsed
         
-            print(
-            f"Processed {frame_count} frames | "
-            f"Avg Speed: {fps_processing:.2f} FPS | "
-            f"Frame: {frame_time:.3f}s | "
-            f"Write: {write_time:.3f}s")
+    #         print(
+    #         f"Processed {frame_count} frames | "
+    #         f"Avg Speed: {fps_processing:.2f} FPS | "
+    #         f"Frame: {frame_time:.3f}s | "
+    #         f"Write: {write_time:.3f}s")
+    
+    with ProcessPoolExecutor(
+    max_workers=max_workers) as executor:
 
+        while True:
+    
+            batch_frames = []
+            
+            # Read Batch
+            for _ in range(batch_size):
+    
+                ret, frame = cap.read()
+    
+                if not ret:
+                    break
+    
+                frame_count += 1
+    
+                batch_frames.append(
+                    (
+                        frame,
+                        effect,
+                        bg_image,
+                        blur_strength
+                    )
+                )
+    
+            if not batch_frames:
+                break
+    
+            frame_start = time.time()
+    
+            # parallel processing
+            processed_batch = list(
+                executor.map(
+                    process_single_frame,
+                    batch_frames
+                )
+            )
+            
+            write_start = time.time()
+    
+            for processed_frame in processed_batch:
+                out.write(processed_frame)
+    
+            write_time = time.time() - write_start
+            frame_time = time.time() - frame_start
+    
+            # streamlit progress
+            if progress_callback and total_frames > 0:
+    
+                if (
+                    frame_count % 5 == 0
+                    or frame_count == total_frames
+                ):
+                    progress_callback(
+                        min(
+                            frame_count / total_frames,
+                            1.0
+                        )
+                    )
+            if frame_count % 30 == 0:
+    
+                elapsed = time.time() - start_time
+                fps_processing = frame_count / elapsed
+    
+                print(
+                    f"Processed {frame_count} frames | "
+                    f"Avg Speed: {fps_processing:.2f} FPS | "
+                    f"Batch: {frame_time:.3f}s | "
+                    f"Write: {write_time:.3f}s"
+                )
+    
     # Release resources
     cap.release()
     out.release()
