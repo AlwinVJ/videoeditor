@@ -1,5 +1,7 @@
 from pathlib import Path
 import streamlit as st
+import cv2
+import numpy as np
 
 from core.utils import generate_safe_filename
 
@@ -41,4 +43,20 @@ def render_background_uploader():
         type=["jpg", "png"]
     )
 
-    return uploaded_bg
+    bg_image = None
+
+    if uploaded_bg:
+
+        file_bytes = np.asarray(
+            bytearray(
+                uploaded_bg.read()
+            ),
+            dtype=np.uint8
+        )
+
+        bg_image = cv2.imdecode(
+            file_bytes,
+            cv2.IMREAD_COLOR
+        )
+
+    return uploaded_bg, bg_image

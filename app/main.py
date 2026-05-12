@@ -15,16 +15,15 @@ import cv2
 from core.utils import generate_safe_filename, clear_temp_directory
 from core.video_io import process_video
 
-from ui.state import (
-    initialize_session_state,
-    reset_and_clear_all
-)
+from ui.state import initialize_session_state, reset_and_clear_all
 
 from ui.uploader import (
     save_uploaded_file,
     render_video_uploader,
-    render_background_uploader
+    render_background_uploader,
 )
+
+from ui.controls import render_effect_controls
 
 # Path configuration
 TEMP_DIR = Path("temp")
@@ -49,9 +48,9 @@ if st.button("Reset and Clear All"):
 uploaded_file = render_video_uploader()
 
 if uploaded_file:
-    
+
     # File path saved
-    file_path = save_uploaded_file(uploaded_file,TEMP_DIR) 
+    file_path = save_uploaded_file(uploaded_file, TEMP_DIR)
     # Preview original
     st.subheader("Preview")
     col1, col2, col3 = st.columns([3, 0.5, 2])
@@ -61,65 +60,21 @@ if uploaded_file:
         st.success(f"File saved: {file_path.name}")
 
     # Save file
-    
 
     if file_path not in st.session_state.temp_files:
         st.session_state.temp_files.append(file_path)
-        
 
     # Effects
-    effect_label = st.selectbox(
-        "Select Effect",
-        ["None", "Blur Background", "White Background", "Replace Background"]
-    )
-
-    effect_map = {
-        "None": "none",
-        "Blur Background": "blur",
-        "White Background": "white",
-        "Replace Background": "replace"
-    }
-
-    effect = effect_map[effect_label]
-    blur_strength = 51
-    bg_image = None
-    uploaded_bg = None
-    
-    if effect == "blur":
-        blur_option = st.selectbox(
-            "Blur Strength",
-            ["Light", "Medium", "Strong"]
-        )
-    
-        blur_map = {
-            "Light": 21,
-            "Medium": 51,
-            "Strong": 101
-        }
-    
-        blur_strength = blur_map[blur_option]
-
-    if effect == "replace":
-        uploaded_bg = render_background_uploader()
-
-        if uploaded_bg:
-            file_bytes = np.asarray(bytearray(uploaded_bg.read()), dtype=np.uint8)
-            bg_image = cv2.imdecode(file_bytes, 1)
-    
-    # Show uploaded background preview
-        if effect == "replace" and bg_image is not None:
-            with col3:
-                st.markdown("Uploaded Image")
-                st.image(
-                    bg_image,
-                    caption=uploaded_bg.name,
-                    use_container_width=True
-                )
+    effect, blur_strength, bg_image, uploaded_bg = render_effect_controls(col3)
 
     def start_processing():
         st.session_state.is_processing = True
 
-    process_btn = st.button("Process Video", on_click=start_processing, disabled=st.session_state.is_processing)
+    process_btn = st.button(
+        "Process Video",
+        on_click=start_processing,
+        disabled=st.session_state.is_processing,
+    )
 
     if st.session_state.get("processing_complete"):
         st.success("Processing complete!")
@@ -135,23 +90,30 @@ if uploaded_file:
         def update_progress(progress):
             progress_bar.progress(progress)
             status_text.text(f"Processing video... {int(progress * 100)}%")
-        
+
         try:
             with st.spinner("Making changes ..."):
-                process_video(file_path, output_path, effect, bg_image,blur_strength, progress_callback=update_progress)
+                process_video(
+                    file_path,
+                    output_path,
+                    effect,
+                    bg_image,
+                    blur_strength,
+                    progress_callback=update_progress,
+                )
 
             progress_bar.empty()
             status_text.empty()
             st.session_state.processing_complete = True
-    
+
             # Save to session
             st.session_state.processed_video = str(output_path)
-    
+
             if output_path not in st.session_state.temp_files:
                 st.session_state.temp_files.append(output_path)
-        
+
         finally:
-            st.session_state.is_processing = False 
+            st.session_state.is_processing = False
             st.rerun()
 
     if st.session_state.processed_video:
@@ -159,9 +121,9 @@ if uploaded_file:
         st.subheader("Result")
 
         col1, col2 = st.columns(2)
-        
+
         video_path = Path(st.session_state.processed_video)
-        
+
         with col1:
             st.subheader("Original Video")
             st.video(uploaded_file)
