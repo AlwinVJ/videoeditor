@@ -40,43 +40,7 @@ def process_video(input_path: Path, output_path: Path, effect="blur", bg_image=N
     out = cv2.VideoWriter(str(temp_output), fourcc, fps, (width, height))
 
     frame_count = 0
-
-    # while True:
-    #     ret, frame = cap.read()
-    #     if not ret:
-    #         break
-
-    #     frame_count += 1
-
-    #     # Apply segmentation-based effect
-    #     frame_start = time.time()
-    #     processed_frame = apply_background_effect(
-    #         frame,
-    #         effect=effect,
-    #         bg_image=bg_image,
-    #         blur_strength=blur_strength,
-    #         frame_count=frame_count
-    #     )
-
-    #     write_start = time.time()
-    #     out.write(processed_frame)
-    #     write_time = time.time() - write_start
-    #     frame_time = time.time() - frame_start
-    #     if progress_callback and total_frames > 0:
-    #         if frame_count % 5 == 0 or frame_count == total_frames:
-    #             progress_callback(min(frame_count / total_frames, 1.0))
-
-    #     # Optional debug (remove later)
-    #     if frame_count % 30 == 0:
-    #         elapsed = time.time() - start_time
-    #         fps_processing = frame_count / elapsed
         
-    #         print(
-    #         f"Processed {frame_count} frames | "
-    #         f"Avg Speed: {fps_processing:.2f} FPS | "
-    #         f"Frame: {frame_time:.3f}s | "
-    #         f"Write: {write_time:.3f}s")
-    
     with ProcessPoolExecutor(
     max_workers=max_workers) as executor:
 
