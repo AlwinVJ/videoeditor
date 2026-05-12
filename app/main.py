@@ -15,6 +15,11 @@ import cv2
 from core.utils import generate_safe_filename, clear_temp_directory
 from core.video_io import process_video
 
+from ui.state import (
+    initialize_session_state,
+    reset_and_clear_all
+)
+
 # Path configuration
 TEMP_DIR = Path("temp")
 TEMP_DIR.mkdir(exist_ok=True)
@@ -22,22 +27,7 @@ TEMP_DIR.mkdir(exist_ok=True)
 st.set_page_config(page_title="Video Background Editor", layout="wide")
 
 # Handling session state
-
-if "temp_files" not in st.session_state:
-    st.session_state.temp_files = []
-
-if "uploader_key" not in st.session_state:
-    st.session_state.uploader_key = "uploaded_video"
-
-if "processed_video" not in st.session_state:
-    st.session_state.processed_video = None
-
-if "is_processing" not in st.session_state:
-    st.session_state.is_processing = False
-
-if "processing_complete" not in st.session_state:
-    st.session_state.processing_complete = False
-    
+initialize_session_state()
 
 effect = "none"
 uploaded_bg = None
@@ -54,24 +44,11 @@ def save_uploaded_file(uploaded_file):
     return file_path
 
 
-def reset_and_clear_all():
-    clear_temp_directory(TEMP_DIR)
-
-    st.session_state.temp_files = []
-    st.session_state.processed_video = None
-
-    # reset uploader
-    st.session_state.uploader_key = str(uuid.uuid4())
-
-    st.success("All files cleared and reset successfully!")
-    st.rerun()
-
-
 # UI
 st.title("🎬 Video Background Editor")
 
 if st.button("Reset and Clear All"):
-    reset_and_clear_all()
+    reset_and_clear_all(TEMP_DIR)
 
 uploaded_file = st.file_uploader(
     "Upload a video",
