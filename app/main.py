@@ -20,6 +20,12 @@ from ui.state import (
     reset_and_clear_all
 )
 
+from ui.uploader import (
+    save_uploaded_file,
+    render_video_uploader,
+    render_background_uploader
+)
+
 # Path configuration
 TEMP_DIR = Path("temp")
 TEMP_DIR.mkdir(exist_ok=True)
@@ -34,32 +40,18 @@ uploaded_bg = None
 bg_image = None
 
 
-def save_uploaded_file(uploaded_file):
-    safe_name = generate_safe_filename(uploaded_file.name)
-    file_path = TEMP_DIR / safe_name
-
-    with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-
-    return file_path
-
-
 # UI
 st.title("🎬 Video Background Editor")
 
 if st.button("Reset and Clear All"):
     reset_and_clear_all(TEMP_DIR)
 
-uploaded_file = st.file_uploader(
-    "Upload a video",
-    type=["mp4", "mov", "avi"],
-    key=st.session_state.uploader_key
-)
+uploaded_file = render_video_uploader()
 
 if uploaded_file:
     
     # File path saved
-    file_path = save_uploaded_file(uploaded_file) 
+    file_path = save_uploaded_file(uploaded_file,TEMP_DIR) 
     # Preview original
     st.subheader("Preview")
     col1, col2, col3 = st.columns([3, 0.5, 2])
@@ -108,10 +100,7 @@ if uploaded_file:
         blur_strength = blur_map[blur_option]
 
     if effect == "replace":
-        uploaded_bg = st.file_uploader(
-            "Upload Background Image",
-            type=["jpg", "png"]
-        )
+        uploaded_bg = render_background_uploader()
 
         if uploaded_bg:
             file_bytes = np.asarray(bytearray(uploaded_bg.read()), dtype=np.uint8)
