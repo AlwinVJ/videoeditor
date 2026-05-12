@@ -24,6 +24,12 @@ from ui.uploader import (
 )
 
 from ui.controls import render_effect_controls
+from ui.preview import (
+    show_video_comparison,
+    show_background_preview,
+    show_download_button,
+    show_uploaded_video_preview,
+)
 
 # Path configuration
 TEMP_DIR = Path("temp")
@@ -54,10 +60,7 @@ if uploaded_file:
     # Preview original
     st.subheader("Preview")
     col1, col2, col3 = st.columns([3, 0.5, 2])
-    with col1:
-        st.markdown("Uploaded Video")
-        st.video(uploaded_file, width=800)
-        st.success(f"File saved: {file_path.name}")
+    show_uploaded_video_preview(uploaded_file, file_path, col1)
 
     # Save file
 
@@ -66,6 +69,9 @@ if uploaded_file:
 
     # Effects
     effect, blur_strength, bg_image, uploaded_bg = render_effect_controls(col3)
+
+    # Background preview
+    show_background_preview(bg_image, uploaded_bg, col3)
 
     def start_processing():
         st.session_state.is_processing = True
@@ -124,13 +130,7 @@ if uploaded_file:
 
         video_path = Path(st.session_state.processed_video)
 
-        with col1:
-            st.subheader("Original Video")
-            st.video(uploaded_file)
-
-        with col2:
-            st.subheader("Processed Video")
-            st.video(str(video_path))
+        show_video_comparison(uploaded_file, video_path, col1, col2)
 
         # Download
         with open(video_path, "rb") as f:
