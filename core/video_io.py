@@ -4,12 +4,7 @@ from pathlib import Path
 from core.audio import merge_audio
 from concurrent.futures import ProcessPoolExecutor
 from core.worker import process_single_frame, initialize_worker
-import time, os, multiprocessing
-
-multiprocessing.set_start_method(
-    "spawn",
-    force=True
-)
+import time, os
 
 
 def process_video(

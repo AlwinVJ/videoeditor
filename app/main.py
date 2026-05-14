@@ -1,9 +1,7 @@
 import sys
 from pathlib import Path
-from multiprocessing import freeze_support
 
 
-freeze_support()
 # Fix import path
 ROOT_DIR = Path(__file__).resolve().parent
 if ROOT_DIR.name == "app":
@@ -42,72 +40,72 @@ from ui.processing import (
 TEMP_DIR = Path("temp")
 TEMP_DIR.mkdir(exist_ok=True)
 
-st.set_page_config(page_title="Video Background Editor", layout="wide")
+if __name__ == "__main__":
+    st.set_page_config(page_title="Video Background Editor", layout="wide")
 
-# Handling session state
-initialize_session_state()
+    # Handling session state
+    initialize_session_state()
 
-effect = "none"
-uploaded_bg = None
-bg_image = None
+    effect = "none"
+    uploaded_bg = None
+    bg_image = None
 
+    # UI
+    st.title("🎬 Video Background Editor")
 
-# UI
-st.title("🎬 Video Background Editor")
+    if st.button("Reset and Clear All"):
+        reset_and_clear_all(TEMP_DIR)
 
-if st.button("Reset and Clear All"):
-    reset_and_clear_all(TEMP_DIR)
+    uploaded_file = render_video_uploader()
 
-uploaded_file = render_video_uploader()
+    if uploaded_file:
 
-if uploaded_file:
+        # File path saved
+        file_path = save_uploaded_file(uploaded_file, TEMP_DIR)
+        # Preview original
+        st.subheader("Preview")
+        col1, col2, col3 = st.columns([3, 0.5, 2])
+        show_uploaded_video_preview(uploaded_file, file_path, col1)
 
-    # File path saved
-    file_path = save_uploaded_file(uploaded_file, TEMP_DIR)
-    # Preview original
-    st.subheader("Preview")
-    col1, col2, col3 = st.columns([3, 0.5, 2])
-    show_uploaded_video_preview(uploaded_file, file_path, col1)
+        # Save file
 
-    # Save file
+        if file_path not in st.session_state.temp_files:
+            st.session_state.temp_files.append(file_path)
 
-    if file_path not in st.session_state.temp_files:
-        st.session_state.temp_files.append(file_path)
+        # Effects
+        effect, blur_strength, bg_image, uploaded_bg = render_effect_controls(col3)
 
-    # Effects
-    effect, blur_strength, bg_image, uploaded_bg = render_effect_controls(col3)
+        # Background preview
+        show_background_preview(bg_image, uploaded_bg, col3)
 
-    # Background preview
-    show_background_preview(bg_image, uploaded_bg, col3)
+        render_process_button()
 
-    render_process_button()
+        show_processing_complete()
 
-    show_processing_complete()
-
-    if st.session_state.is_processing:
-        handle_video_processing(
-            file_path=file_path,
-            temp_dir=TEMP_DIR,
-            effect=effect,
-            bg_image=bg_image,
-            blur_strength=blur_strength,
-        )
-
-    if st.session_state.processed_video:
-        st.divider()
-        st.subheader("Result")
-
-        col1, col2 = st.columns(2)
-
-        video_path = Path(st.session_state.processed_video)
-
-        show_video_comparison(uploaded_file, video_path, col1, col2)
-
-        # Download
-        with open(video_path, "rb") as f:
-            st.download_button(
-                label="Download Processed Video",
-                data=f,
-                file_name="processed_video.mp4",
-                mime="video/mp4",
+        if st.session_state.is_processing:
+            handle_video_processing(
+                file_path=file_path,
+                temp_dir=TEMP_DIR,
+                effect=effect,
+                bg_image=bg_image,
+                blur_strength=blur_strength,
             )
+
+        if st.session_state.processed_video:
+            st.divider()
+            st.subheader("Result")
+
+            col1, col2 = st.columns(2)
+
+            video_path = Path(st.session_state.processed_video)
+
+            show_video_comparison(uploaded_file, video_path, col1, col2)
+
+            # Download
+            with open(video_path, "rb") as f:
+                st.download_button(
+                    label="Download Processed Video",
+                    data=f,
+                    file_name="processed_video.mp4",
+                    mime="video/mp4",
+                )
