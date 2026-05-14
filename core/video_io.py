@@ -29,7 +29,7 @@ def process_video(
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    Conservative worker count
+    # Conservative worker count
     cpu_count = os.cpu_count() or 4
     max_workers = max(1, min(cpu_count - 1, 4))
 
