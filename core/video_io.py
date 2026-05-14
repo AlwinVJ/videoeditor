@@ -15,7 +15,6 @@ def process_video(
     blur_strength=51,
     progress_callback=None,
 ):
-    start_time = time.time()
     # Open video
     cap = cv2.VideoCapture(str(input_path))
 
@@ -33,8 +32,6 @@ def process_video(
     # Conservative worker count
     cpu_count = os.cpu_count() or 4
     max_workers = max(1, min(cpu_count - 1, 4))
-
-    print(f"Using {max_workers} workers")
 
     batch_size = 12
 
@@ -106,20 +103,6 @@ def process_video(
                         progress_callback(
                             min(frame_count / total_frames, 1.0)
                         )
-        
-    frame_time = time.time() - frame_start
-
-    # Debug logs
-    if frame_count % 30 == 0:
-        elapsed = time.time() - start_time
-        fps_processing = frame_count / elapsed
-
-        print(
-            f"Processed {frame_count} frames | "
-            f"Avg Speed: {fps_processing:.2f} FPS | "
-            f"Batch: {frame_time:.3f}s | "
-            f"Write: {write_time:.3f}s"
-        )
 
     # Release resources
     cap.release()
@@ -135,15 +118,5 @@ def process_video(
     # Cleanup temp file
     if temp_output.exists():
         temp_output.unlink()
-
-    # print("Video processing finished!")
-
-    total_time = time.time() - start_time
-
-    print("\n===== PERFORMANCE REPORT =====")
-    print(f"Total Frames: {frame_count}")
-    print(f"Total Time: {total_time:.2f} sec")
-    print(f"Average FPS: {frame_count / total_time:.2f}")
-    print("==============================")
 
     return output_path
