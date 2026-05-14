@@ -8,7 +8,10 @@ from mediapipe.tasks.python import vision
 
 MODEL_PATH = str(Path(__file__).parent / "models" / "selfie_segmenter.tflite")
 
-base_options = python.BaseOptions(model_asset_path=MODEL_PATH)
+base_options = python.BaseOptions(
+    model_asset_path=MODEL_PATH,
+    delegate=python.BaseOptions.Delegate.CPU
+)
 
 options = vision.ImageSegmenterOptions(
     base_options=base_options, output_category_mask=True
