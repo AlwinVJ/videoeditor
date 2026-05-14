@@ -35,7 +35,7 @@ This project is an AI-powered video editing application that performs real-time 
 
 ```bash
 uv pip install -r requirements.txt
-uv run streamlit run app/main.py
+uv run streamlit run main.py
 ```
 
 ## Deployment
