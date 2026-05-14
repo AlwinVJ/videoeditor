@@ -39,7 +39,7 @@ def process_single_frame(frame):
     blur_strength = worker_blur_strength
 
     # Resize for segmentation
-    scale = 0.35
+    scale = 0.5
 
     small_frame = cv2.resize(frame, None, fx=scale, fy=scale)
 

@@ -7,6 +7,7 @@ ROOT_DIR = Path(__file__).resolve().parent
 if ROOT_DIR.name == "app":
     ROOT_DIR = ROOT_DIR.parent
 sys.path.append(str(ROOT_DIR))
+sys.path.append(str(ROOT_DIR / "app"))
 
 import streamlit as st
 
@@ -40,7 +41,7 @@ from ui.processing import (
 TEMP_DIR = Path("temp")
 TEMP_DIR.mkdir(exist_ok=True)
 
-if __name__ == "__main__":
+def run_app():
     st.set_page_config(page_title="Video Background Editor", layout="wide")
 
     # Handling session state
@@ -109,3 +110,6 @@ if __name__ == "__main__":
                     file_name="processed_video.mp4",
                     mime="video/mp4",
                 )
+
+if __name__ == "__main__":
+    run_app()
