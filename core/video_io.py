@@ -30,8 +30,10 @@ def process_video(
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     # Conservative worker count
-    cpu_count = os.cpu_count() or 4
-    max_workers = max(1, min(cpu_count - 1, 4))
+    # cpu_count = os.cpu_count() or 4
+    # max_workers = max(1, min(cpu_count - 1, 4))
+    
+    max_workers = 1
 
     batch_size = 12
 
