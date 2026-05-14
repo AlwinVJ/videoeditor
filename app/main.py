@@ -1,6 +1,9 @@
 import sys
 from pathlib import Path
+from multiprocessing import freeze_support
 
+
+freeze_support()
 # Fix import path
 ROOT_DIR = Path(__file__).resolve().parent
 if ROOT_DIR.name == "app":
