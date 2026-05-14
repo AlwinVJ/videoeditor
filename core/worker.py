@@ -1,3 +1,6 @@
+import os
+os.environ['GLOG_minloglevel'] = '2'
+
 import cv2
 import numpy as np
 from pathlib import Path
@@ -8,16 +11,8 @@ from mediapipe.tasks.python import vision
 
 MODEL_PATH = str(Path(__file__).parent / "models" / "selfie_segmenter.tflite")
 
-base_options = python.BaseOptions(
-    model_asset_path=MODEL_PATH,
-    delegate=python.BaseOptions.Delegate.CPU
-)
-
-options = vision.ImageSegmenterOptions(
-    base_options=base_options, output_category_mask=True
-)
-
-segmenter = vision.ImageSegmenter.create_from_options(options)
+# Lazy initialization for worker processes to prevent Streamlit / multiprocessing fork issues
+segmenter = None
 
 worker_effect = "none"
 worker_bg_image = None
@@ -28,10 +23,23 @@ def initialize_worker(effect, bg_image, blur_strength):
     global worker_effect
     global worker_bg_image
     global worker_blur_strength
+    global segmenter
 
     worker_effect = effect
     worker_bg_image = bg_image
     worker_blur_strength = blur_strength
+
+    if segmenter is None:
+        base_options = python.BaseOptions(
+            model_asset_path=MODEL_PATH,
+            delegate=python.BaseOptions.Delegate.CPU
+        )
+
+        options = vision.ImageSegmenterOptions(
+            base_options=base_options, output_category_mask=True
+        )
+
+        segmenter = vision.ImageSegmenter.create_from_options(options)
 
 
 def process_single_frame(frame):
