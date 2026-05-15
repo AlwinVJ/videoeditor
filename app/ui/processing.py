@@ -108,4 +108,4 @@ def handle_video_processing(
             False
         )
 
-        st.rerun()
+        # st.rerun()
