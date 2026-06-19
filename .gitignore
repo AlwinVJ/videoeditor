@@ -12,9 +12,6 @@ wheels/
 # Virtual environments
 .venv
 
-# Streamlit
-.streamlit/
-
 # OS
 .DS_Store
 Thumbs.db
