@@ -1,50 +1,216 @@
-# AI Video Background Editor
+# AI Video Editor
 
-## Overview
-
-This project is an AI-powered video editing application that performs real-time background segmentation and applies visual effects such as blur, background replacement, and white background while preserving the original audio.
+An AI-powered video editing application built with Python and Streamlit. It allows users to upload videos, apply AI-based background effects, preview the processed output, and download the edited video.
 
 ## Features
 
-* Human background segmentation using MediaPipe
-* Effects: Blur, White Background, Background Replacement
-* Audio preservation using FFmpeg (no system dependency)
-* Optimized processing (frame scaling + skipping)
-* Live preview and download via Streamlit UI
+### Background Editing
+- **Background Blur:** Apply blur effects to the background while keeping the foreground subject intact.
+- **White Background:** Replace the existing background with a solid white background.
+- **Background Replacement:** Replace the original background with a custom image.
+- **Adjustable Blur Strength:** Choose between Light, Medium, and Strong blur levels.
 
-## Architecture
+### Video Processing
+- Upload and process individual videos.
+- AI-powered person segmentation using MediaPipe.
+- Video processing using OpenCV.
+- Audio preservation using FFmpeg.
+- Preview the original and processed videos.
+- Download the final processed video.
 
-1. Upload video
-2. Extract frames using OpenCV
-3. Apply segmentation mask
-4. Apply selected effect
-5. Generate processed video (no audio)
-6. Merge original audio using FFmpeg
-7. Display and download output
+### Planned Features
+- AI-assisted video transcription.
+- Automatic B-roll keyword generation.
+- Stock footage search using Pixabay/Pexels.
+- Timestamp-based B-roll placement.
+- AI-assisted video editing workflow.
+
+> Note: Planned features are not necessarily available in the current application.
+
+---
 
 ## Tech Stack
 
-* Python
-* OpenCV
-* MediaPipe
-* NumPy
-* Streamlit
-* imageio-ffmpeg
+| Technology | Purpose |
+|---|---|
+| Python | Core programming language |
+| Streamlit | Application interface |
+| OpenCV | Video processing |
+| MediaPipe | AI-based person segmentation |
+| NumPy | Image and frame manipulation |
+| FFmpeg | Video encoding and audio processing |
+| imageio-ffmpeg | FFmpeg binary integration |
 
-## Run Locally
+---
+
+## Getting Started
+
+Follow these instructions to download and run the application locally.
+
+### 1. Prerequisites
+
+Make sure you have the following installed:
+
+- Python 3.12 (recommended compatibility target; verify against the project's current dependency versions).
+- Git
+- pip
+
+### 2. Clone the Repository
+
+Open your terminal or PowerShell and execute:
 
 ```bash
-uv pip install -r requirements.txt
-uv run streamlit run main.py
+git clone <YOUR_GITHUB_REPOSITORY_URL>
 ```
 
-## Deployment
+Navigate into the cloned repository:
 
-Deployed on Streamlit Cloud (no system dependencies required)
+```bash
+cd videoediting
+```
 
-## Future Improvements
+Replace `videoediting` with the actual repository directory name if different.
 
-* Real-time video processing
-* GPU acceleration
-* Background video replacement
-* Multi-person segmentation
+### 3. Create a Virtual Environment
+
+Create a Python virtual environment:
+
+```bash
+py -3.12 -m venv .venv
+```
+
+### 4. Activate the Virtual Environment
+
+For Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+For Windows Command Prompt:
+
+```cmd
+.venv\Scripts\activate.bat
+```
+
+For macOS/Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+Once activated, your terminal should display:
+
+```text
+(.venv)
+```
+
+### 5. Upgrade pip
+
+```bash
+python -m pip install --upgrade pip
+```
+
+### 6. Install Dependencies
+
+Install all required Python packages:
+
+```bash
+pip install -r requirements.txt
+```
+
+This installs the dependencies specified by the project.
+
+### 7. Run the Application
+
+Start the Streamlit application:
+
+```bash
+streamlit run app/main.py
+```
+
+Once the application starts, Streamlit will provide a local URL.
+
+Open the following address in your browser:
+
+```text
+http://localhost:8501
+```
+
+---
+
+## Project Structure
+
+The application follows a modular architecture.
+
+```text
+videoediting/
+│
+├── app/
+│   ├── main.py
+│   └── ui/
+│       ├── sidebar.py
+│       ├── editor.py
+│       ├── uploader.py
+│       ├── controls.py
+│       ├── processing.py
+│       ├── preview.py
+│       └── state.py
+│
+├── core/
+│   ├── video_io.py
+│   ├── worker.py
+│   ├── audio.py
+│   └── utils.py
+│
+├── temp/
+│
+├── requirements.txt
+├── README.md
+└── .gitignore
+```
+
+*The structure above is illustrative. Refer to the actual repository for the latest files and directories.*
+
+---
+
+## How to Use
+
+1. Launch the application.
+2. Navigate to the Editor workspace.
+3. Upload a video.
+4. Select the desired background effect:
+   - Blur Background
+   - White Background
+   - Replace Background
+5. Configure the blur strength or upload a replacement background image.
+6. Click **Process Video**.
+7. Wait for processing to complete.
+8. Preview the processed video.
+9. Download the final output.
+
+---
+
+## Troubleshooting
+
+### MediaPipe Installation Issues
+
+If MediaPipe installation fails:
+
+1. Verify your Python version.
+2. Check whether the MediaPipe version specified in `requirements.txt` supports your Python version and operating system.
+3. Upgrade pip:
+
+```bash
+python -m pip install --upgrade pip
+```
+
+4. Reinstall the dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+### Streamlit Command Not Found
+
+Make sure your virtual environment is activated.
