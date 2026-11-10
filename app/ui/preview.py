@@ -4,11 +4,15 @@ import streamlit as st
 from app.ui.state import AppState, set_state
 
 
-def show_uploaded_video_preview(uploaded_file, file_path, col1):
-    """Display the uploaded input video with its extracted metadata."""
+def show_uploaded_video_preview(file_path, col1):
+    """
+    Display the uploaded input video with its extracted metadata.
+    Streams directly from disk to enable browser progressive range requests.
+    """
     with col1:
         st.markdown("### Uploaded Video")
-        st.video(uploaded_file)
+        if file_path and Path(file_path).exists():
+            st.video(str(file_path))
 
         metadata = st.session_state.get("video_metadata", {})
         if metadata:
@@ -17,22 +21,29 @@ def show_uploaded_video_preview(uploaded_file, file_path, col1):
             fps = metadata.get("fps", 0)
             dur = metadata.get("duration", 0)
             st.caption(f"Resolution: {w}x{h} | Duration: {dur}s | FPS: {fps}")
-        else:
+        elif file_path:
             st.success(f"File saved: {Path(file_path).name}")
 
 
-def show_video_comparison(uploaded_file, video_path, col1, col2):
-    """Display side-by-side comparison of original and processed videos."""
-    video_path = Path(video_path)
+def show_video_comparison(original_video_path, processed_video_path, col1, col2):
+    """
+    Display side-by-side comparison of original and processed videos.
+    Both players stream progressive byte ranges from disk.
+    """
+    orig_path = Path(original_video_path) if original_video_path else None
+    proc_path = Path(processed_video_path) if processed_video_path else None
 
     with col1:
         st.subheader("Original Video")
-        st.video(uploaded_file)
+        if orig_path and orig_path.exists():
+            st.video(str(orig_path))
+        else:
+            st.info("Original video is unavailable.")
 
     with col2:
         st.subheader("Processed Video")
-        if video_path.exists() and video_path.stat().st_size > 0:
-            st.video(str(video_path))
+        if proc_path and proc_path.exists() and proc_path.stat().st_size > 0:
+            st.video(str(proc_path))
         else:
             st.warning("Processed video file is not available on disk.")
 
@@ -46,7 +57,11 @@ def show_background_preview(bg_image, uploaded_bg, col3):
 
 
 def show_download_button(video_path):
-    """Render the download button for the completed video."""
+    """
+    Render download button using a deferred callable.
+    Prevents Streamlit from serializing large multi-megabyte video files into the
+    WebSocket message during initial preview render.
+    """
     if not video_path:
         return
 
@@ -55,15 +70,16 @@ def show_download_button(video_path):
         st.warning("Processed output file is not available for download.")
         return
 
-    def on_download_click():
+    def get_video_download_bytes() -> bytes:
+        """Executed lazily only when the user clicks Download."""
         set_state(AppState.EXPORTED)
+        with open(path_obj, "rb") as fh:
+            return fh.read()
 
-    with open(path_obj, "rb") as file_handle:
-        st.download_button(
-            label="Download Processed Video",
-            data=file_handle,
-            file_name=f"processed_{path_obj.name}",
-            mime="video/mp4",
-            on_click=on_download_click,
-            key="download_processed_video_btn",
-        )
+    st.download_button(
+        label="Download Processed Video",
+        data=get_video_download_bytes,
+        file_name=f"processed_{path_obj.name}",
+        mime="video/mp4",
+        key="download_processed_video_btn",
+    )

@@ -13,7 +13,8 @@ def create_ffmpeg_pipe_process(
     """
     Launch an FFmpeg process that accepts raw BGR frames from stdin and multiplexes
     audio directly from the original video in a single pass.
-    Eliminates intermediate video files and double encoding.
+    Configured with ultrafast preset, fastdecode tuning, faststart index,
+    and a 2-thread ceiling to minimize CPU usage on Streamlit Cloud.
     """
     ffmpeg_path = ffmpeg.get_ffmpeg_exe()
     final_output = Path(final_output)
@@ -31,7 +32,8 @@ def create_ffmpeg_pipe_process(
         "-i", "pipe:0",
         "-i", str(original_video),
         "-c:v", "libx264",
-        "-preset", "veryfast",
+        "-preset", "ultrafast",
+        "-tune", "fastdecode",
         "-crf", "23",
         "-threads", "2",
         "-c:a", "aac",
@@ -53,9 +55,7 @@ def create_ffmpeg_pipe_process(
 
 def merge_audio(original_video, processed_video, final_output, timeout=180):
     """
-    Merge the original audio stream onto a processed video file.
-    Uses an optimized preset and thread ceiling to control CPU load,
-    and applies faststart for instant web preview.
+    Fallback helper to multiplex original audio onto a processed video file.
     """
     ffmpeg_path = ffmpeg.get_ffmpeg_exe()
     final_output = Path(final_output)
@@ -68,7 +68,8 @@ def merge_audio(original_video, processed_video, final_output, timeout=180):
         "-i", str(processed_video),
         "-i", str(original_video),
         "-c:v", "libx264",
-        "-preset", "veryfast",
+        "-preset", "ultrafast",
+        "-tune", "fastdecode",
         "-crf", "23",
         "-threads", "2",
         "-c:a", "aac",
@@ -81,7 +82,7 @@ def merge_audio(original_video, processed_video, final_output, timeout=180):
     ]
 
     try:
-        result = subprocess.run(
+        subprocess.run(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

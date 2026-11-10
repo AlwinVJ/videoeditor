@@ -61,10 +61,10 @@ def run_app():
         # File path saved idempotently (will not re-write on rerun)
         file_path = save_uploaded_file(uploaded_file, TEMP_DIR)
 
-        # Preview original
+        # Preview original directly from disk to enable progressive HTTP byte streaming
         st.subheader("Preview")
         col1, col2, col3 = st.columns([3, 0.5, 2])
-        show_uploaded_video_preview(uploaded_file, file_path, col1)
+        show_uploaded_video_preview(file_path, col1)
 
         # Effects
         effect, blur_strength, bg_image, uploaded_bg = render_effect_controls(col3)
@@ -97,9 +97,9 @@ def run_app():
                 st.subheader("Result")
 
                 col_res1, col_res2 = st.columns(2)
-                show_video_comparison(uploaded_file, video_path, col_res1, col_res2)
+                show_video_comparison(file_path, video_path, col_res1, col_res2)
 
-                # Download button
+                # Download button with deferred streaming
                 show_download_button(video_path)
 
 

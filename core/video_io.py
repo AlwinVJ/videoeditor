@@ -1,7 +1,11 @@
+import os
 from pathlib import Path
 import shutil
 import time
 import cv2
+
+# Clamp OpenCV internal thread pool to 1 thread to avoid host oversubscription on cloud containers
+cv2.setNumThreads(1)
 
 from core.audio import create_ffmpeg_pipe_process, merge_audio
 from core.worker import VideoFrameSegmenter
@@ -9,7 +13,7 @@ from core.utils import safe_unlink
 
 
 def get_video_metadata(video_path: Path) -> dict:
-    """Extract metadata from a video file."""
+    """Extract metadata from a video file quickly from stream headers."""
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         raise ValueError(f"Could not open video file: {video_path}")
@@ -58,14 +62,11 @@ def process_video(
     blur_strength=51,
     progress_callback=None,
     max_duration_seconds: float = 600.0,
-    frame_stride: int = 2,
+    frame_stride: int = None,
 ):
     """
-    Process video with single-pass direct FFmpeg pipe streaming and adaptive frame stride.
-    - Zero intermediate video files.
-    - Zero double-encoding overhead.
-    - Up to 50% reduction in AI inference cycles via temporal mask reuse.
-    - Fast SIMD linear scaling.
+    Process video with single-pass direct FFmpeg pipe streaming, adaptive frame stride,
+    zero-copy memoryview writes, and single-thread clamping to prevent CPU throttling.
     """
     input_path = Path(input_path)
     output_path = Path(output_path)
@@ -97,6 +98,10 @@ def process_video(
         target_w, target_h = compute_target_resolution(orig_w, orig_h, max_dimension=1920)
         needs_resize = (target_w != orig_w) or (target_h != orig_h)
 
+        # Compute adaptive frame stride if not explicitly specified (targets 8-10 inferences/s)
+        if frame_stride is None:
+            frame_stride = max(1, int(round(fps / 10.0)))
+
         # Initialize segmenter with target resolution and frame stride
         segmenter = VideoFrameSegmenter(
             effect=effect,
@@ -118,7 +123,7 @@ def process_video(
         frame_count = 0
         update_interval = max(1, total_frames // 100) if total_frames > 0 else 5
 
-        # Stream processed frames directly into FFmpeg stdin
+        # Stream processed frames directly into FFmpeg stdin with zero-copy memoryview
         while True:
             ret, frame = cap.read()
             if not ret or frame is None:
@@ -130,7 +135,8 @@ def process_video(
             processed_frame = segmenter.process_frame(frame)
 
             try:
-                ffmpeg_proc.stdin.write(processed_frame.tobytes())
+                # Zero-copy memoryview write avoids allocating large temporary Python byte buffers
+                ffmpeg_proc.stdin.write(memoryview(processed_frame))
             except (BrokenPipeError, IOError) as e:
                 raise RuntimeError("FFmpeg pipe closed unexpectedly during frame encoding.") from e
 

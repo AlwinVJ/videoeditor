@@ -1,4 +1,5 @@
 from pathlib import Path
+import shutil
 import streamlit as st
 import cv2
 import numpy as np
@@ -10,12 +11,13 @@ from app.ui.state import AppState, set_state
 
 def save_uploaded_file(uploaded_file, temp_dir: Path) -> Path:
     """
-    Save the uploaded file idempotently.
-    Avoids re-writing the file to disk on every Streamlit rerun if it hasn't changed.
+    Save the uploaded file idempotently using chunked streaming.
+    Avoids loading full multi-megabyte buffers into RAM multiple times
+    and reuses existing files on disk across Streamlit reruns.
     """
     fingerprint = get_file_fingerprint(uploaded_file.name, uploaded_file.size)
 
-    # If the file is already cached and exists on disk, reuse it
+    # If the file is already cached and exists on disk, reuse it directly
     cached_path = st.session_state.get("input_video_path")
     if (
         st.session_state.get("uploaded_file_id") == fingerprint
@@ -24,17 +26,18 @@ def save_uploaded_file(uploaded_file, temp_dir: Path) -> Path:
     ):
         return Path(cached_path)
 
-    # New video uploaded: save file and extract metadata
+    # New video uploaded: save file via 1MB chunked stream to minimize RAM footprint
     safe_name = generate_safe_filename(uploaded_file.name)
     file_path = temp_dir / safe_name
 
+    uploaded_file.seek(0)
     with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+        shutil.copyfileobj(uploaded_file, f, length=1024 * 1024)
 
     st.session_state.uploaded_file_id = fingerprint
     st.session_state.input_video_path = str(file_path)
 
-    # Extract and store metadata
+    # Extract lightweight header metadata
     try:
         metadata = get_video_metadata(file_path)
         st.session_state.video_metadata = metadata

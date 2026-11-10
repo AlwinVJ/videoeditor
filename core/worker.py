@@ -1,9 +1,19 @@
 import os
+
+# Limit CPU thread contention for cgroups container environments
 os.environ["GLOG_minloglevel"] = "2"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 from pathlib import Path
 import cv2
 import numpy as np
+
+# Clamp OpenCV internal thread pool to 1 thread to avoid host oversubscription
+cv2.setNumThreads(1)
 
 import mediapipe as mp
 from mediapipe.tasks import python
@@ -11,11 +21,28 @@ from mediapipe.tasks.python import vision
 
 MODEL_PATH = str(Path(__file__).parent / "models" / "selfie_segmenter.tflite")
 
-# Global singleton segmenter for backward compatibility
-segmenter = None
+# Cached singleton segmenter to avoid re-parsing TFLite weights on every run
+_SHARED_IMAGE_SEGMENTER = None
+
 worker_effect = "none"
 worker_bg_image = None
 worker_blur_strength = 51
+
+
+def get_shared_segmenter():
+    """Retrieve or lazily create the shared MediaPipe ImageSegmenter instance."""
+    global _SHARED_IMAGE_SEGMENTER
+    if _SHARED_IMAGE_SEGMENTER is None:
+        base_options = python.BaseOptions(
+            model_asset_path=MODEL_PATH,
+            delegate=python.BaseOptions.Delegate.CPU,
+        )
+        options = vision.ImageSegmenterOptions(
+            base_options=base_options,
+            output_category_mask=True,
+        )
+        _SHARED_IMAGE_SEGMENTER = vision.ImageSegmenter.create_from_options(options)
+    return _SHARED_IMAGE_SEGMENTER
 
 
 class VideoFrameSegmenter:
@@ -27,7 +54,7 @@ class VideoFrameSegmenter:
         bg_image=None,
         blur_strength=51,
         target_size=None,
-        frame_stride: int = 1,
+        frame_stride: int = 2,
     ):
         self.effect = effect
         self.blur_strength = blur_strength if blur_strength % 2 == 1 else blur_strength + 1
@@ -44,16 +71,8 @@ class VideoFrameSegmenter:
             else:
                 self.bg_image = bg_image
 
-        # Initialize MediaPipe segmenter
-        base_options = python.BaseOptions(
-            model_asset_path=MODEL_PATH,
-            delegate=python.BaseOptions.Delegate.CPU,
-        )
-        options = vision.ImageSegmenterOptions(
-            base_options=base_options,
-            output_category_mask=True,
-        )
-        self.segmenter = vision.ImageSegmenter.create_from_options(options)
+        # Use shared cached segmenter
+        self.segmenter = get_shared_segmenter()
 
     def process_frame(self, frame: np.ndarray) -> np.ndarray:
         if self.effect == "none":
@@ -109,47 +128,30 @@ class VideoFrameSegmenter:
         return output
 
     def close(self):
-        if hasattr(self, "segmenter") and self.segmenter is not None:
-            try:
-                self.segmenter.close()
-            except Exception:
-                pass
-            self.segmenter = None
+        # Retain shared segmenter in memory for instant reuse
+        pass
 
 
 def initialize_worker(effect, bg_image, blur_strength):
     """Backward-compatible initialization for multiprocessing if invoked."""
-    global worker_effect, worker_bg_image, worker_blur_strength, segmenter
-
+    global worker_effect, worker_bg_image, worker_blur_strength
     worker_effect = effect
     worker_blur_strength = blur_strength if blur_strength % 2 == 1 else blur_strength + 1
     worker_bg_image = bg_image
-
-    if segmenter is None:
-        base_options = python.BaseOptions(
-            model_asset_path=MODEL_PATH,
-            delegate=python.BaseOptions.Delegate.CPU,
-        )
-        options = vision.ImageSegmenterOptions(
-            base_options=base_options,
-            output_category_mask=True,
-        )
-        segmenter = vision.ImageSegmenter.create_from_options(options)
+    get_shared_segmenter()
 
 
 def process_single_frame(frame):
     """Backward-compatible single-frame processor."""
-    global worker_bg_image, segmenter
-
-    if segmenter is None:
-        initialize_worker(worker_effect, worker_bg_image, worker_blur_strength)
+    global worker_bg_image
+    segmenter_inst = get_shared_segmenter()
 
     h, w = frame.shape[:2]
     small_frame = cv2.resize(frame, (256, 256), interpolation=cv2.INTER_LINEAR)
     rgb_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
 
-    result = segmenter.segment(mp_image)
+    result = segmenter_inst.segment(mp_image)
     mask = result.category_mask.numpy_view()
     mask = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
     condition = (mask < 0.5)[..., None]
