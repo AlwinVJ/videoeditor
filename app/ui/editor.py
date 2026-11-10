@@ -29,44 +29,6 @@ def render_editor_page(temp_dir: Path):
     # Page Header matching reference image
     st.markdown(
         """
-        <style>
-
-        /* Move the complete editor workspace upward */
-        section[data-testid="stMain"] .block-container {
-            padding-top: 5rem !important;
-            padding-bottom: 1rem !important;
-        }
-
-        /* Reduce header spacing */
-        .page-header-container {
-            margin-top: -0.5rem !important;
-            margin-bottom: 1rem !important;
-        }
-
-        /* Compact editor cards */
-        .editor-card {
-            padding: 14px 18px !important;
-            margin-bottom: 12px !important;
-        }
-
-        /* Reduce spacing between Streamlit elements */
-        div[data-testid="stVerticalBlock"] {
-            gap: 0.75rem;
-        }
-
-        /* Reduce unnecessary space around video previews */
-        div[data-testid="stVideo"] {
-            margin-top: 0 !important;
-            margin-bottom: 0 !important;
-        }
-
-        /* Compact processing status */
-        .status-banner-card {
-            margin-top: 8px !important;
-            margin-bottom: 8px !important;
-        }
-
-        </style>
         <div class="page-header-container">
             <div class="header-icon-box">
                 🎬

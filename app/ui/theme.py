@@ -29,7 +29,7 @@ def apply_theme():
     }
 
     /* =====================================================================
-       SIDEBAR STYLING
+       SIDEBAR STYLING & PERMANENT VISIBILITY
        ===================================================================== */
     section[data-testid="stSidebar"] {
         background-color: #12141e !important;
@@ -37,11 +37,37 @@ def apply_theme():
         width: 290px !important;
     }
 
+    /* Completely hide the sidebar collapse button to prevent accidental collapsing */
+    [data-testid="stSidebarCollapseButton"] {
+        display: none !important;
+    }
+
+    /* Collapse the default empty sidebar header bar to eliminate top dead space */
+    [data-testid="stSidebarHeader"] {
+        display: none !important;
+    }
+
     section[data-testid="stSidebar"] > div {
-        padding-top: 1.5rem !important;
+        padding-top: 1.25rem !important;
         padding-bottom: 1.5rem !important;
         padding-left: 1.25rem !important;
         padding-right: 1.25rem !important;
+    }
+
+    /* Ensure the expand button remains visible, styled, and accessible if ever collapsed */
+    [data-testid="stExpandSidebarButton"] {
+        visibility: visible !important;
+        display: flex !important;
+        color: #f1f2f6 !important;
+        background: #12141e !important;
+        border: 1px solid #1f2336 !important;
+        border-radius: 8px !important;
+        z-index: 1000 !important;
+    }
+
+    [data-testid="stExpandSidebarButton"]:hover {
+        background: #1f2336 !important;
+        border-color: #6c5ce7 !important;
     }
 
     /* Sidebar Logo Header */
@@ -514,9 +540,29 @@ def apply_theme():
         background: #171b2b !important;
     }
 
-    /* Hide Streamlit header & footer */
-    #MainMenu, header, footer {
+    /* =====================================================================
+       STREAMLIT CHROME OVERRIDES
+       ===================================================================== */
+    /* Hide Streamlit hamburger menu and footer WITHOUT hiding the header container */
+    #MainMenu {
         visibility: hidden !important;
+        display: none !important;
+    }
+
+    footer {
+        visibility: hidden !important;
+        display: none !important;
+    }
+
+    /* Hide deploy button and extra toolbar actions */
+    [data-testid="stToolbarActions"],
+    [data-testid="stDeployButton"] {
+        display: none !important;
+    }
+
+    /* Keep header transparent so expand button is visible if ever needed */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
     }
     </style>
     """

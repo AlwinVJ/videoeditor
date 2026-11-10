@@ -15,14 +15,9 @@ def render_sidebar(temp_dir: Path):
         st.markdown(
             """
             <style>
-                /* Reduce the sidebar's top spacing */
-                section[data-testid="stSidebar"] > div {
-                    padding-top: 0rem;
-                }
-        
                 /* Move branding slightly upward */
                 .sidebar-brand-container {
-                    margin-top: -1rem;
+                    margin-top: 1.6rem;
                 }
             </style>
             
