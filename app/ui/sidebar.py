@@ -14,6 +14,18 @@ def render_sidebar(temp_dir: Path):
         # Branding Header
         st.markdown(
             """
+            <style>
+                /* Reduce the sidebar's top spacing */
+                section[data-testid="stSidebar"] > div {
+                    padding-top: 0rem;
+                }
+        
+                /* Move branding slightly upward */
+                .sidebar-brand-container {
+                    margin-top: -1rem;
+                }
+            </style>
+            
             <div class="sidebar-brand-container">
                 <div class="brand-icon-box">
                     <span>▶</span>
@@ -31,9 +43,9 @@ def render_sidebar(temp_dir: Path):
 
         # Navigation: Editor
         editor_active = (current_page == "editor")
-        editor_btn_label = "🏠  Editor\nBackground, effects & processing" if not editor_active else "✦  Editor (Active)"
+        editor_btn_label = "Background & Effects" if not editor_active else "✦  Editor (Active)"
         if st.button(
-            "🏠  Editor\n\nBackground, effects & processing",
+            "Background & Effects",
             key="nav_editor_btn",
             use_container_width=True,
             type="primary" if editor_active else "secondary",
@@ -45,7 +57,7 @@ def render_sidebar(temp_dir: Path):
         # Navigation: AI B-roll
         broll_active = (current_page == "broll")
         if st.button(
-            "✨  AI B-roll\n\nTranscribe, find & add stock footage",
+            "AI B-roll",
             key="nav_broll_btn",
             use_container_width=True,
             type="primary" if broll_active else "secondary",
@@ -57,7 +69,7 @@ def render_sidebar(temp_dir: Path):
         # Navigation: Export
         export_active = (current_page == "export")
         if st.button(
-            "📥  Export\n\nDownload processed video",
+            "Download processed video",
             key="nav_export_btn",
             use_container_width=True,
             type="primary" if export_active else "secondary",
@@ -69,7 +81,7 @@ def render_sidebar(temp_dir: Path):
         st.markdown("<div style='height: 40px;'></div>", unsafe_allow_html=True)
 
         # Optional Reset button in sidebar for user convenience
-        if st.button("🗑️ Reset and Clear All", key="sidebar_reset_btn", use_container_width=True):
+        if st.button("Reset and Clear All", key="sidebar_reset_btn", use_container_width=True):
             reset_and_clear_all(temp_dir)
 
         st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
