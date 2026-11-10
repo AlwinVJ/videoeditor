@@ -3,7 +3,7 @@ import shutil
 import time
 import cv2
 
-from core.audio import merge_audio
+from core.audio import create_ffmpeg_pipe_process, merge_audio
 from core.worker import VideoFrameSegmenter
 from core.utils import safe_unlink
 
@@ -58,11 +58,14 @@ def process_video(
     blur_strength=51,
     progress_callback=None,
     max_duration_seconds: float = 600.0,
+    frame_stride: int = 2,
 ):
     """
-    Process video with the selected effect using an in-process, zero-IPC pipeline.
-    Maintains high throughput (>100 FPS), predictable memory (<300MB),
-    and safe cleanup.
+    Process video with single-pass direct FFmpeg pipe streaming and adaptive frame stride.
+    - Zero intermediate video files.
+    - Zero double-encoding overhead.
+    - Up to 50% reduction in AI inference cycles via temporal mask reuse.
+    - Fast SIMD linear scaling.
     """
     input_path = Path(input_path)
     output_path = Path(output_path)
@@ -72,9 +75,8 @@ def process_video(
     if not cap.isOpened():
         raise ValueError(f"Error opening video file: {input_path}")
 
-    out = None
+    ffmpeg_proc = None
     segmenter = None
-    temp_output = output_path.parent / f"temp_{output_path.name}"
 
     try:
         fps = cap.get(cv2.CAP_PROP_FPS)
@@ -95,33 +97,42 @@ def process_video(
         target_w, target_h = compute_target_resolution(orig_w, orig_h, max_dimension=1920)
         needs_resize = (target_w != orig_w) or (target_h != orig_h)
 
-        # Initialize segmenter once with target resolution for pre-scaling background
+        # Initialize segmenter with target resolution and frame stride
         segmenter = VideoFrameSegmenter(
             effect=effect,
             bg_image=bg_image,
             blur_strength=blur_strength,
             target_size=(target_w, target_h),
+            frame_stride=frame_stride,
         )
 
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        out = cv2.VideoWriter(str(temp_output), fourcc, fps, (target_w, target_h))
-        if not out.isOpened():
-            raise RuntimeError(f"Could not open temporary video writer at {temp_output}")
+        # Launch single-pass FFmpeg streaming pipe
+        ffmpeg_proc = create_ffmpeg_pipe_process(
+            original_video=input_path,
+            final_output=output_path,
+            width=target_w,
+            height=target_h,
+            fps=fps,
+        )
 
         frame_count = 0
         update_interval = max(1, total_frames // 100) if total_frames > 0 else 5
 
-        # Process frames in-process sequentially
+        # Stream processed frames directly into FFmpeg stdin
         while True:
             ret, frame = cap.read()
             if not ret or frame is None:
                 break
 
             if needs_resize:
-                frame = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
+                frame = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
 
             processed_frame = segmenter.process_frame(frame)
-            out.write(processed_frame)
+
+            try:
+                ffmpeg_proc.stdin.write(processed_frame.tobytes())
+            except (BrokenPipeError, IOError) as e:
+                raise RuntimeError("FFmpeg pipe closed unexpectedly during frame encoding.") from e
 
             frame_count += 1
 
@@ -129,21 +140,28 @@ def process_video(
                 if frame_count % update_interval == 0 or frame_count == total_frames:
                     progress_callback(min(frame_count / total_frames, 1.0))
 
+        # Close stdin to signal EOF to FFmpeg
+        if ffmpeg_proc and ffmpeg_proc.stdin:
+            ffmpeg_proc.stdin.close()
+
+        # Wait for FFmpeg to finish multiplexing and writing the final file
+        stderr_bytes = ffmpeg_proc.stderr.read() if ffmpeg_proc.stderr else b""
+        ffmpeg_proc.stderr.close()
+        ffmpeg_proc.wait(timeout=120)
+
+        if ffmpeg_proc.returncode != 0:
+            stderr_text = stderr_bytes.decode("utf-8", errors="replace")
+            raise RuntimeError(f"FFmpeg streaming encoding failed ({ffmpeg_proc.returncode}): {stderr_text[:300]}")
+
     finally:
         if cap is not None and cap.isOpened():
             cap.release()
-        if out is not None and out.isOpened():
-            out.release()
         if segmenter is not None:
             segmenter.close()
-
-    # Multiplex audio onto final output
-    try:
-        merge_audio(input_path, temp_output, output_path)
-    except Exception as e:
-        print(f"Audio merge warning ({e}), falling back to video without audio.")
-        shutil.copy(temp_output, output_path)
-    finally:
-        safe_unlink(temp_output)
+        if ffmpeg_proc is not None and ffmpeg_proc.poll() is None:
+            try:
+                ffmpeg_proc.kill()
+            except Exception:
+                pass
 
     return output_path

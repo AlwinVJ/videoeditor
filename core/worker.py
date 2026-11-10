@@ -19,12 +19,22 @@ worker_blur_strength = 51
 
 
 class VideoFrameSegmenter:
-    """High-performance in-process frame segmenter and compositor."""
+    """High-performance in-process frame segmenter and compositor with temporal mask reuse."""
 
-    def __init__(self, effect="none", bg_image=None, blur_strength=51, target_size=None):
+    def __init__(
+        self,
+        effect="none",
+        bg_image=None,
+        blur_strength=51,
+        target_size=None,
+        frame_stride: int = 1,
+    ):
         self.effect = effect
         self.blur_strength = blur_strength if blur_strength % 2 == 1 else blur_strength + 1
         self.target_size = target_size  # (width, height)
+        self.frame_stride = max(1, frame_stride)
+        self.frame_idx = 0
+        self.cached_mask = None
 
         # Pre-scale background image once if target size is known
         self.bg_image = None
@@ -56,17 +66,26 @@ class VideoFrameSegmenter:
             if self.bg_image.shape[:2] != (h, w):
                 self.bg_image = cv2.resize(self.bg_image, (w, h), interpolation=cv2.INTER_LINEAR)
 
-        # Downsample to 256x256 for optimal MediaPipe inference speed (>150 FPS)
-        small_frame = cv2.resize(frame, (256, 256), interpolation=cv2.INTER_LINEAR)
-        rgb_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+        # Run AI inference on stride frames, reuse cached mask on intervening frames
+        needs_inference = (
+            self.cached_mask is None
+            or (self.frame_idx % self.frame_stride == 0)
+        )
 
-        result = self.segmenter.segment(mp_image)
-        mask = result.category_mask.numpy_view()
+        if needs_inference:
+            # Downsample to 256x256 for optimal MediaPipe inference speed (>150 FPS)
+            small_frame = cv2.resize(frame, (256, 256), interpolation=cv2.INTER_LINEAR)
+            rgb_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
 
-        # Upscale mask back to original resolution with nearest neighbor
-        mask = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
-        condition = (mask < 0.5)[..., None]
+            result = self.segmenter.segment(mp_image)
+            raw_mask = result.category_mask.numpy_view()
+
+            # Upscale mask back to original resolution with nearest neighbor
+            self.cached_mask = cv2.resize(raw_mask, (w, h), interpolation=cv2.INTER_NEAREST)
+
+        self.frame_idx += 1
+        condition = (self.cached_mask < 0.5)[..., None]
 
         if self.effect == "blur":
             blur_w = max(16, w // 4)

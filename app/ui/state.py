@@ -14,6 +14,17 @@ class AppState:
     EXPORTED = "EXPORTED"
     FAILED = "FAILED"
 
+    # Explicit allowed transitions
+    VALID_TRANSITIONS = {
+        IDLE: {UPLOADED, IDLE},
+        UPLOADED: {PROCESSING, IDLE, UPLOADED},
+        PROCESSING: {COMPLETED, FAILED},
+        COMPLETED: {PREVIEW, EXPORTED, PROCESSING, IDLE, UPLOADED},
+        PREVIEW: {EXPORTED, PROCESSING, IDLE, UPLOADED},
+        EXPORTED: {PREVIEW, PROCESSING, IDLE, UPLOADED},
+        FAILED: {PROCESSING, IDLE, UPLOADED},
+    }
+
 
 def initialize_session_state():
     """Initialize all session state variables with explicit defaults."""
@@ -30,7 +41,7 @@ def initialize_session_state():
         "error_message": None,
         "temp_files": [],
         "uploader_key": "uploader_init",
-        # Retain backward compatibility flags
+        # Backward compatibility flags
         "is_processing": False,
         "processing_complete": False,
     }
@@ -41,7 +52,16 @@ def initialize_session_state():
 
 
 def set_state(new_state: str):
-    """Transition to a new application state with synchronized legacy flags."""
+    """
+    Transition to a new application state with validation and
+    synchronized legacy flags.
+    """
+    current_state = st.session_state.get("app_state", AppState.IDLE)
+    allowed = AppState.VALID_TRANSITIONS.get(current_state, set())
+
+    if new_state not in allowed and new_state != current_state:
+        print(f"Warning: Unexpected state transition from {current_state} to {new_state}")
+
     st.session_state.app_state = new_state
     st.session_state.is_processing = (new_state == AppState.PROCESSING)
     st.session_state.processing_complete = (
