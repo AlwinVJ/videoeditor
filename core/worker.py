@@ -1,9 +1,9 @@
 import os
-os.environ['GLOG_minloglevel'] = '2'
+os.environ["GLOG_minloglevel"] = "2"
 
+from pathlib import Path
 import cv2
 import numpy as np
-from pathlib import Path
 
 import mediapipe as mp
 from mediapipe.tasks import python
@@ -11,93 +11,145 @@ from mediapipe.tasks.python import vision
 
 MODEL_PATH = str(Path(__file__).parent / "models" / "selfie_segmenter.tflite")
 
-# Lazy initialization for worker processes to prevent Streamlit / multiprocessing fork issues
+# Global singleton segmenter for backward compatibility
 segmenter = None
-
 worker_effect = "none"
 worker_bg_image = None
 worker_blur_strength = 51
 
 
+class VideoFrameSegmenter:
+    """High-performance in-process frame segmenter and compositor."""
+
+    def __init__(self, effect="none", bg_image=None, blur_strength=51, target_size=None):
+        self.effect = effect
+        self.blur_strength = blur_strength if blur_strength % 2 == 1 else blur_strength + 1
+        self.target_size = target_size  # (width, height)
+
+        # Pre-scale background image once if target size is known
+        self.bg_image = None
+        if bg_image is not None:
+            if target_size is not None and bg_image.shape[:2] != (target_size[1], target_size[0]):
+                self.bg_image = cv2.resize(bg_image, target_size, interpolation=cv2.INTER_LINEAR)
+            else:
+                self.bg_image = bg_image
+
+        # Initialize MediaPipe segmenter
+        base_options = python.BaseOptions(
+            model_asset_path=MODEL_PATH,
+            delegate=python.BaseOptions.Delegate.CPU,
+        )
+        options = vision.ImageSegmenterOptions(
+            base_options=base_options,
+            output_category_mask=True,
+        )
+        self.segmenter = vision.ImageSegmenter.create_from_options(options)
+
+    def process_frame(self, frame: np.ndarray) -> np.ndarray:
+        if self.effect == "none":
+            return frame
+
+        h, w = frame.shape[:2]
+
+        # Ensure background image matches frame resolution
+        if self.effect == "replace" and self.bg_image is not None:
+            if self.bg_image.shape[:2] != (h, w):
+                self.bg_image = cv2.resize(self.bg_image, (w, h), interpolation=cv2.INTER_LINEAR)
+
+        # Downsample to 256x256 for optimal MediaPipe inference speed (>150 FPS)
+        small_frame = cv2.resize(frame, (256, 256), interpolation=cv2.INTER_LINEAR)
+        rgb_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+
+        result = self.segmenter.segment(mp_image)
+        mask = result.category_mask.numpy_view()
+
+        # Upscale mask back to original resolution with nearest neighbor
+        mask = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
+        condition = (mask < 0.5)[..., None]
+
+        if self.effect == "blur":
+            blur_w = max(16, w // 4)
+            blur_h = max(16, h // 4)
+            small_blur = cv2.resize(frame, (blur_w, blur_h), interpolation=cv2.INTER_LINEAR)
+            blurred_small = cv2.GaussianBlur(
+                small_blur, (self.blur_strength, self.blur_strength), 0
+            )
+            blurred = cv2.resize(blurred_small, (w, h), interpolation=cv2.INTER_LINEAR)
+            output = np.where(condition, frame, blurred)
+
+        elif self.effect == "replace" and self.bg_image is not None:
+            output = np.where(condition, frame, self.bg_image)
+
+        elif self.effect == "white":
+            output = np.where(condition, frame, 255)
+
+        else:
+            output = frame
+
+        return output
+
+    def close(self):
+        if hasattr(self, "segmenter") and self.segmenter is not None:
+            try:
+                self.segmenter.close()
+            except Exception:
+                pass
+            self.segmenter = None
+
+
 def initialize_worker(effect, bg_image, blur_strength):
-    global worker_effect
-    global worker_bg_image
-    global worker_blur_strength
-    global segmenter
+    """Backward-compatible initialization for multiprocessing if invoked."""
+    global worker_effect, worker_bg_image, worker_blur_strength, segmenter
 
     worker_effect = effect
+    worker_blur_strength = blur_strength if blur_strength % 2 == 1 else blur_strength + 1
     worker_bg_image = bg_image
-    worker_blur_strength = blur_strength
 
     if segmenter is None:
         base_options = python.BaseOptions(
             model_asset_path=MODEL_PATH,
-            delegate=python.BaseOptions.Delegate.CPU
+            delegate=python.BaseOptions.Delegate.CPU,
         )
-
         options = vision.ImageSegmenterOptions(
-            base_options=base_options, output_category_mask=True
+            base_options=base_options,
+            output_category_mask=True,
         )
-
         segmenter = vision.ImageSegmenter.create_from_options(options)
 
 
 def process_single_frame(frame):
-    global worker_bg_image
+    """Backward-compatible single-frame processor."""
+    global worker_bg_image, segmenter
 
-    effect = worker_effect
-    bg_image = worker_bg_image
-    blur_strength = worker_blur_strength
+    if segmenter is None:
+        initialize_worker(worker_effect, worker_bg_image, worker_blur_strength)
 
-    # Resize for segmentation
-    scale = 0.5
-
-    small_frame = cv2.resize(frame, None, fx=scale, fy=scale)
-
+    h, w = frame.shape[:2]
+    small_frame = cv2.resize(frame, (256, 256), interpolation=cv2.INTER_LINEAR)
     rgb_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
 
     result = segmenter.segment(mp_image)
-
     mask = result.category_mask.numpy_view()
+    mask = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
+    condition = (mask < 0.5)[..., None]
 
-    # Use nearest-neighbor resize for category mask (much faster)
-    mask = cv2.resize(mask, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_NEAREST)
+    if worker_effect == "blur":
+        blur_w = max(16, w // 4)
+        blur_h = max(16, h // 4)
+        small_blur = cv2.resize(frame, (blur_w, blur_h))
+        k = worker_blur_strength if worker_blur_strength % 2 == 1 else worker_blur_strength + 1
+        blurred_small = cv2.GaussianBlur(small_blur, (k, k), 0)
+        blurred = cv2.resize(blurred_small, (w, h))
+        return np.where(condition, frame, blurred)
 
-    condition = mask < 0.5
+    elif worker_effect == "replace" and worker_bg_image is not None:
+        if worker_bg_image.shape[:2] != (h, w):
+            worker_bg_image = cv2.resize(worker_bg_image, (w, h))
+        return np.where(condition, frame, worker_bg_image)
 
-    if effect == "blur":
+    elif worker_effect == "white":
+        return np.where(condition, frame, 255)
 
-        blur_scale = 0.25
-
-        small_blur_frame = cv2.resize(frame, None, fx=blur_scale, fy=blur_scale)
-
-        if blur_strength % 2 == 0:
-            blur_strength += 1
-
-        blurred_small = cv2.GaussianBlur(
-            small_blur_frame, (blur_strength, blur_strength), 0
-        )
-
-        blurred = cv2.resize(blurred_small, (frame.shape[1], frame.shape[0]))
-
-        output = np.where(condition[..., None], frame, blurred)
-
-    elif effect == "replace" and bg_image is not None:
-        
-        if bg_image.shape[:2] != (frame.shape[0], frame.shape[1]):
-            bg_image = cv2.resize(bg_image, (frame.shape[1], frame.shape[0]))
-            worker_bg_image = bg_image
-
-        output = np.where(condition[..., None], frame, bg_image)
-
-    elif effect == "white":
-
-        # Use scalar broadcasting instead of allocating a large array
-        output = np.where(condition[..., None], frame, 255)
-
-    else:
-        output = frame
-
-    return output
+    return frame
