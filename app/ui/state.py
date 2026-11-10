@@ -53,6 +53,11 @@ def initialize_session_state():
         "blur_option": "Medium",
         "bg_image_name": None,
         "bg_image_size": 0,
+        # B-roll session state
+        "broll_input_video": None,
+        "broll_source": None,  # "transferred" | "uploaded"
+        "broll_preview_active": False,
+        "broll_uploader_key": "broll_uploader_init",
     }
 
     for key, value in defaults.items():
@@ -100,6 +105,10 @@ def reset_and_clear_all(temp_dir: Path):
     st.session_state.preview_mode = "comparison"
     st.session_state.bg_image_name = None
     st.session_state.bg_image_size = 0
+    st.session_state.broll_input_video = None
+    st.session_state.broll_source = None
+    st.session_state.broll_preview_active = False
+    st.session_state.broll_uploader_key = str(uuid.uuid4())[:8]
 
     # Force a fresh file uploader widget key
     st.session_state.uploader_key = str(uuid.uuid4())

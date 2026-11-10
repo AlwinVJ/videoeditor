@@ -119,7 +119,8 @@ def render_export_page():
         )
 
         def get_export_bytes() -> bytes:
-            set_state(AppState.EXPORTED)
+            if st.session_state.get("app_state") in (AppState.COMPLETED, AppState.PREVIEW):
+                set_state(AppState.EXPORTED)
             with open(proc_path, "rb") as fh:
                 return fh.read()
 

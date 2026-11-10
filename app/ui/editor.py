@@ -356,7 +356,7 @@ def render_editor_page(temp_dir: Path):
         with action_col1:
             process_btn_disabled = (not has_input) or (app_state == AppState.PROCESSING)
             if st.button(
-                "▷  Process Video",
+                "Process Video",
                 type="primary",
                 disabled=process_btn_disabled,
                 use_container_width=True,
@@ -407,14 +407,15 @@ def render_editor_page(temp_dir: Path):
             download_disabled = not has_processed
 
             def get_download_data() -> bytes:
-                set_state(AppState.EXPORTED)
+                if st.session_state.get("app_state") in (AppState.COMPLETED, AppState.PREVIEW):
+                    set_state(AppState.EXPORTED)
                 with open(processed_path, "rb") as fh:
                     return fh.read()
 
             out_filename = f"processed_{Path(processed_path).name}" if has_processed else "processed_video.mp4"
 
             st.download_button(
-                label="📥  Download Video",
+                label="Download Video",
                 data=get_download_data if has_processed else b"",
                 file_name=out_filename,
                 mime="video/mp4",
@@ -422,3 +423,20 @@ def render_editor_page(temp_dir: Path):
                 use_container_width=True,
                 key="primary_download_video_action_btn",
             )
+
+        # Card 6: Transfer Processed Video to AI B-roll
+        st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+        transfer_disabled = not has_processed
+
+        if st.button(
+            label="Continue with B-roll Editing →",
+            disabled=transfer_disabled,
+            use_container_width=True,
+            key="continue_to_broll_btn",
+        ):
+            if has_processed and Path(processed_path).exists() and Path(processed_path).stat().st_size > 0:
+                st.session_state["broll_input_video"] = str(processed_path)
+                st.session_state["broll_source"] = "transferred"
+                st.session_state["broll_preview_active"] = False
+                st.session_state["current_page"] = "broll"
+                st.rerun()

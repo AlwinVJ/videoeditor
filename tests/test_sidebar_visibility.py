@@ -40,10 +40,16 @@ def test_sidebar_config_and_css():
     assert not re.search(r'(#MainMenu,\s*header,\s*footer|\bheader\b)\s*\{\s*visibility:\s*hidden', theme_content), \
         "header must not be hidden with visibility: hidden (it hides the expand button)"
 
-    # Verify stExpandSidebarButton is explicitly enabled and visible
+    # Verify permanent expansion constraints on section[data-testid="stSidebar"]
+    assert 'transform: none !important;' in theme_content, "stSidebar must enforce transform: none !important"
+    assert 'min-width: 290px !important;' in theme_content, "stSidebar must enforce min-width: 290px !important"
+    assert 'max-width: 290px !important;' in theme_content, "stSidebar must enforce max-width: 290px !important"
+    assert 'flex-shrink: 0 !important;' in theme_content, "stSidebar must enforce flex-shrink: 0 !important"
+
+    # Verify stExpandSidebarButton and stSidebarCollapseButton are suppressed
     assert '[data-testid="stExpandSidebarButton"]' in theme_content, "stExpandSidebarButton must be targeted"
-    assert re.search(r'\[data-testid="stExpandSidebarButton"\]\s*\{[^}]*visibility:\s*visible\s*!important', theme_content), \
-        "stExpandSidebarButton must have visibility: visible !important"
+    assert re.search(r'\[data-testid="stExpandSidebarButton"\]\s*\{[^}]*display:\s*none\s*!important', theme_content), \
+        "stExpandSidebarButton must have display: none !important"
 
     print("[PASSED] TEST 2: All CSS rules for permanent sidebar visibility verified.")
 

@@ -49,7 +49,7 @@ def run_app():
     if active_page == "editor":
         render_editor_page(TEMP_DIR)
     elif active_page == "broll":
-        render_broll_page()
+        render_broll_page(TEMP_DIR)
     elif active_page == "export":
         render_export_page()
     else:

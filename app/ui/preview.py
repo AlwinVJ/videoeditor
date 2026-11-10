@@ -72,7 +72,8 @@ def show_download_button(video_path):
 
     def get_video_download_bytes() -> bytes:
         """Executed lazily only when the user clicks Download."""
-        set_state(AppState.EXPORTED)
+        if st.session_state.get("app_state") in (AppState.COMPLETED, AppState.PREVIEW):
+            set_state(AppState.EXPORTED)
         with open(path_obj, "rb") as fh:
             return fh.read()
 

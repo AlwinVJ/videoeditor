@@ -31,20 +31,50 @@ def apply_theme():
     /* =====================================================================
        SIDEBAR STYLING & PERMANENT VISIBILITY
        ===================================================================== */
+    /* Lock the sidebar in an expanded state regardless of internal frontend state */
     section[data-testid="stSidebar"] {
         background-color: #12141e !important;
         border-right: 1px solid #1f2336 !important;
         width: 290px !important;
+        min-width: 290px !important;
+        max-width: 290px !important;
+        flex-shrink: 0 !important;
+        transform: none !important;
+        transition: none !important;
+        margin-left: 0 !important;
+        left: 0 !important;
+        position: relative !important;
+        display: flex !important;
+        flex-direction: column !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+
+    /* Ensure internal sidebar containers fill the fixed width and remain visible */
+    section[data-testid="stSidebar"] > div:first-child,
+    div[data-testid="stSidebarContent"],
+    div[data-testid="stSidebarUserContent"] {
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+        transform: none !important;
+        visibility: visible !important;
+        opacity: 1 !important;
     }
 
     /* Completely hide the sidebar collapse button to prevent accidental collapsing */
     [data-testid="stSidebarCollapseButton"] {
         display: none !important;
+        visibility: hidden !important;
     }
 
     /* Collapse the default empty sidebar header bar to eliminate top dead space */
     [data-testid="stSidebarHeader"] {
         display: none !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
     }
 
     section[data-testid="stSidebar"] > div {
@@ -54,20 +84,10 @@ def apply_theme():
         padding-right: 1.25rem !important;
     }
 
-    /* Ensure the expand button remains visible, styled, and accessible if ever collapsed */
+    /* Hide the expand button since sidebar is permanently expanded */
     [data-testid="stExpandSidebarButton"] {
-        visibility: visible !important;
-        display: flex !important;
-        color: #f1f2f6 !important;
-        background: #12141e !important;
-        border: 1px solid #1f2336 !important;
-        border-radius: 8px !important;
-        z-index: 1000 !important;
-    }
-
-    [data-testid="stExpandSidebarButton"]:hover {
-        background: #1f2336 !important;
-        border-color: #6c5ce7 !important;
+        display: none !important;
+        visibility: hidden !important;
     }
 
     /* Sidebar Logo Header */
