@@ -29,10 +29,14 @@ class AppState:
 def initialize_session_state():
     """Initialize all session state variables with explicit defaults."""
     defaults = {
+        "current_page": "editor",  # "editor" | "broll" | "export"
+        "preview_mode": "comparison",  # "comparison" | "processed_only"
         "app_state": AppState.IDLE,
         "active_job_id": None,
         "completed_job_id": None,
         "uploaded_file_id": None,
+        "uploaded_file_name": None,
+        "uploaded_file_size": 0,
         "input_video_path": None,
         "processed_video": None,
         "video_metadata": {},
@@ -44,6 +48,11 @@ def initialize_session_state():
         # Backward compatibility flags
         "is_processing": False,
         "processing_complete": False,
+        # Edit settings state
+        "selected_effect": "Replace Background",
+        "blur_option": "Medium",
+        "bg_image_name": None,
+        "bg_image_size": 0,
     }
 
     for key, value in defaults.items():
@@ -77,6 +86,8 @@ def reset_and_clear_all(temp_dir: Path):
     st.session_state.active_job_id = None
     st.session_state.completed_job_id = None
     st.session_state.uploaded_file_id = None
+    st.session_state.uploaded_file_name = None
+    st.session_state.uploaded_file_size = 0
     st.session_state.input_video_path = None
     st.session_state.processed_video = None
     st.session_state.video_metadata = {}
@@ -86,6 +97,9 @@ def reset_and_clear_all(temp_dir: Path):
     st.session_state.temp_files = []
     st.session_state.is_processing = False
     st.session_state.processing_complete = False
+    st.session_state.preview_mode = "comparison"
+    st.session_state.bg_image_name = None
+    st.session_state.bg_image_size = 0
 
     # Force a fresh file uploader widget key
     st.session_state.uploader_key = str(uuid.uuid4())
