@@ -84,7 +84,7 @@ def render_broll_page(temp_dir: Path = None):
         )
     with hdr_col2:
         st.markdown("<div style='height: 4px;'></div>", unsafe_allow_html=True)
-        if st.button("ℹ️  How It Works", key="broll_how_it_works_btn", use_container_width=True):
+        if st.button("How It Works ❔", key="broll_how_it_works_btn", use_container_width=True):
             st.session_state.show_broll_help = not st.session_state.get("show_broll_help", False)
             st.rerun()
 
@@ -320,7 +320,6 @@ def render_broll_page(temp_dir: Path = None):
                         <div class="card-step-badge">1</div>
                         <div class="card-title-text">Video Transcription</div>
                     </div>
-                    <span style="font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; background: rgba(124, 92, 252, 0.15); color: #a78bfa; border: 1px solid rgba(124, 92, 252, 0.3);">Planned: Groq Whisper</span>
                 </div>
                 <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
                     Extract audio and generate timestamped transcript segments for accurate B-roll matching.
@@ -346,7 +345,6 @@ def render_broll_page(temp_dir: Path = None):
                         <div class="card-step-badge">2</div>
                         <div class="card-title-text">AI Keyword Generation</div>
                     </div>
-                    <span style="font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; background: rgba(124, 92, 252, 0.15); color: #a78bfa; border: 1px solid rgba(124, 92, 252, 0.3);">Planned: Groq LLM</span>
                 </div>
                 <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
                     Generate context-aware visual search queries and footage suggestions for each transcript segment.
@@ -373,7 +371,6 @@ def render_broll_page(temp_dir: Path = None):
                         <div class="card-step-badge">3</div>
                         <div class="card-title-text">Stock Footage Search</div>
                     </div>
-                    <span style="font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">Pixabay / Pexels</span>
                 </div>
                 <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
                     Search free video repositories and select high-resolution B-roll clips.
@@ -399,7 +396,6 @@ def render_broll_page(temp_dir: Path = None):
                         <div class="card-step-badge">4</div>
                         <div class="card-title-text">B-roll Placement & Timeline</div>
                     </div>
-                    <span style="font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; background: rgba(124, 92, 252, 0.15); color: #a78bfa; border: 1px solid rgba(124, 92, 252, 0.3);">Planned: FFmpeg Overlay</span>
                 </div>
                 <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
                     Position selected stock clips at specific start, middle, or end timestamps.
