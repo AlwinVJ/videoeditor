@@ -129,6 +129,16 @@ def get_groq_api_key() -> str:
     return get_required_secret("GROQ_API_KEY", friendly_name="Groq API key")
 
 
+def get_pixabay_api_key() -> str:
+    """
+    Retrieve the Pixabay API key from environment variables or Streamlit Secrets.
+    
+    Returns:
+        The valid Pixabay API key string.
+    """
+    return get_required_secret("PIXABAY_API_KEY", friendly_name="Pixabay API key")
+
+
 def mask_secret(value: Optional[str]) -> str:
     """
     Return a masked representation of a secret for safe debugging/reporting.

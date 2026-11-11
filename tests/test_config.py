@@ -11,6 +11,7 @@ from core.config import (
     get_secret,
     get_required_secret,
     get_groq_api_key,
+    get_pixabay_api_key,
     mask_secret,
 )
 from core.transcription import load_groq_api_key
@@ -116,6 +117,16 @@ class TestCentralizedConfig(unittest.TestCase):
         self.assertIn(".env\n", content)
         self.assertIn(".env.*", content)
         self.assertIn("!.env.example", content)
+
+    def test_12_get_pixabay_api_key(self):
+        """Test that get_pixabay_api_key retrieves the Pixabay API key."""
+        os.environ["PIXABAY_API_KEY"] = "test_pixabay_key_123"
+        try:
+            val = get_pixabay_api_key()
+            self.assertEqual(val, "test_pixabay_key_123")
+        finally:
+            if "PIXABAY_API_KEY" in os.environ:
+                del os.environ["PIXABAY_API_KEY"]
 
 
 if __name__ == "__main__":

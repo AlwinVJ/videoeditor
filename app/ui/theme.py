@@ -280,6 +280,8 @@ def apply_theme():
     div[data-testid="stVerticalBlockBorderWrapper"]:has(.st-key-broll_transcription_card),
     div.st-key-broll_keywords_card,
     div[data-testid="stVerticalBlockBorderWrapper"]:has(.st-key-broll_keywords_card),
+    div.st-key-broll_stock_search_card,
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.st-key-broll_stock_search_card),
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #141622 !important;
         border: 1px solid #22263a !important;
@@ -313,6 +315,80 @@ def apply_theme():
     .keyword-pill-icon {
         font-size: 0.75rem;
         color: #a78bfa;
+    }
+
+    /* Stock Footage Card 3 Styles */
+    .stock-card {
+        background: #10121c;
+        border: 1px solid #1f2336;
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 12px;
+        transition: all 0.2s ease;
+    }
+
+    .stock-card.selected {
+        border: 2px solid #10b981;
+        box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
+    }
+
+    .stock-card-thumb-wrap {
+        position: relative;
+        width: 100%;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #0b0d14;
+        margin-bottom: 10px;
+    }
+
+    .stock-card-thumb-wrap img {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 16/9;
+        object-fit: cover;
+        display: block;
+    }
+
+    .stock-badge-duration {
+        position: absolute;
+        bottom: 8px;
+        right: 8px;
+        background: rgba(15, 17, 26, 0.85);
+        color: #ffffff;
+        font-size: 0.72rem;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 4px;
+        backdrop-filter: blur(4px);
+    }
+
+    .stock-badge-res {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        background: rgba(108, 92, 231, 0.9);
+        color: #ffffff;
+        font-size: 0.7rem;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 4px;
+        backdrop-filter: blur(4px);
+    }
+
+    .stock-meta-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 6px;
+    }
+
+    .stock-tags-text {
+        font-size: 0.74rem;
+        color: #8b90a7;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 8px;
     }
 
     .editor-card-header {

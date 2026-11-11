@@ -64,6 +64,10 @@ def initialize_session_state():
         "broll_keywords": None,
         "broll_keywords_video_id": None,
         "broll_keywords_error": None,
+        "broll_stock_results": None,
+        "broll_stock_video_id": None,
+        "broll_stock_error": None,
+        "broll_selected_clip": None,
     }
 
     for key, value in defaults.items():
@@ -121,6 +125,10 @@ def reset_and_clear_all(temp_dir: Path):
     st.session_state.broll_keywords = None
     st.session_state.broll_keywords_video_id = None
     st.session_state.broll_keywords_error = None
+    st.session_state.broll_stock_results = None
+    st.session_state.broll_stock_video_id = None
+    st.session_state.broll_stock_error = None
+    st.session_state.broll_selected_clip = None
 
     # Force a fresh file uploader widget key
     st.session_state.uploader_key = str(uuid.uuid4())

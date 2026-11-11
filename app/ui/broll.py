@@ -8,6 +8,7 @@ from core.utils import generate_safe_filename, get_file_fingerprint
 from core.video_io import get_video_metadata
 from core.transcription import transcribe_video, format_segment_time
 from core.keywords import generate_keywords_from_transcript
+from core.stock import search_stock_footage
 
 
 def save_broll_upload(uploaded_file, temp_dir: Path) -> Path:
@@ -156,15 +157,31 @@ def render_broll_page(temp_dir: Path = None):
         st.session_state.broll_keywords = None
         st.session_state.broll_keywords_video_id = None
         st.session_state.broll_keywords_error = None
+        st.session_state.broll_stock_results = None
+        st.session_state.broll_stock_video_id = None
+        st.session_state.broll_stock_error = None
+        st.session_state.broll_selected_clip = None
     cached_keywords_video_id = st.session_state.get("broll_keywords_video_id")
     if cached_keywords_video_id and cached_keywords_video_id != current_video_id:
         st.session_state.broll_keywords = None
         st.session_state.broll_keywords_video_id = None
         st.session_state.broll_keywords_error = None
+        st.session_state.broll_stock_results = None
+        st.session_state.broll_stock_video_id = None
+        st.session_state.broll_stock_error = None
+        st.session_state.broll_selected_clip = None
+    cached_stock_video_id = st.session_state.get("broll_stock_video_id")
+    if cached_stock_video_id and cached_stock_video_id != current_video_id:
+        st.session_state.broll_stock_results = None
+        st.session_state.broll_stock_video_id = None
+        st.session_state.broll_stock_error = None
+        st.session_state.broll_selected_clip = None
     if current_video_id and st.session_state.get("broll_transcription_error") == "Please select or upload a video before creating a transcript.":
         st.session_state.broll_transcription_error = None
     if st.session_state.get("broll_transcript") and st.session_state.get("broll_keywords_error") == "Please generate a video transcript before generating keywords.":
         st.session_state.broll_keywords_error = None
+    if st.session_state.get("broll_keywords") and st.session_state.get("broll_stock_error") == "Please generate AI keywords in Step 2 before searching for stock footage.":
+        st.session_state.broll_stock_error = None
 
     # =========================================================================
     # 3. INPUT VIDEO SECTION CARD
@@ -597,30 +614,167 @@ def render_broll_page(temp_dir: Path = None):
                 st.markdown(keywords_html, unsafe_allow_html=True)
 
     # -------------------------------------------------------------------------
-    # CARD 3: Stock Footage Search
+    # STEP 3: Stock Footage Search
     # -------------------------------------------------------------------------
-    st.markdown(
-        """
-        <div class="editor-card">
-            <div class="editor-card-header">
-                <div class="card-title-group">
+    with st.container(key="broll_stock_search_card", border=True):
+        c3_head_col1, c3_head_col2 = st.columns([0.78, 0.22])
+        with c3_head_col1:
+            st.markdown(
+                """
+                <div class="card-title-group" style="display: flex; align-items: center; min-height: 38px;">
                     <div class="card-step-badge">3</div>
                     <div class="card-title-text">Stock Footage Search</div>
                 </div>
-                <span style="font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; background: rgba(124, 92, 252, 0.15); color: #a78bfa; border: 1px solid rgba(124, 92, 252, 0.3);">Search Footage</span>
-            </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with c3_head_col2:
+            search_footage_clicked = st.button(
+                "Search Footage",
+                key="broll_search_footage_btn",
+                type="primary",
+                use_container_width=True,
+            )
+
+        st.markdown(
+            """
             <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
                 Search free video repositories and select high-resolution B-roll clips.
             </p>
-            <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 26px 20px; text-align: center;">
-                <div style="font-size: 28px; margin-bottom: 8px;">🎬</div>
-                <div style="font-size: 0.88rem; font-weight: 500; color: #d1d5db;">Footage Gallery Ready</div>
-                <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Search results and clip previews will appear here.</div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if search_footage_clicked:
+            keywords = st.session_state.get("broll_keywords")
+            if not keywords:
+                st.session_state.broll_stock_error = (
+                    "Please generate AI keywords in Step 2 before searching for stock footage."
+                )
+                st.session_state.broll_stock_results = None
+                st.rerun()
+            else:
+                with st.spinner("Searching Pixabay for stock footage... Please wait."):
+                    try:
+                        results = search_stock_footage(keywords)
+                        st.session_state.broll_stock_results = results
+                        st.session_state.broll_stock_video_id = current_video_id
+                        st.session_state.broll_stock_error = None
+                        st.rerun()
+                    except Exception as e:
+                        st.session_state.broll_stock_error = str(e)
+                        st.rerun()
+
+        stock_err_msg = st.session_state.get("broll_stock_error")
+        if stock_err_msg:
+            st.markdown(
+                f"""
+                <div class="status-banner-card error" style="margin-top: 4px; margin-bottom: 12px;">
+                    <div class="status-banner-icon error">✕</div>
+                    <div>
+                        <div class="status-banner-title">Stock footage search failed</div>
+                        <div class="status-banner-desc">{html.escape(stock_err_msg)}</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        stock_results = st.session_state.get("broll_stock_results")
+        selected_clip = st.session_state.get("broll_selected_clip")
+
+        if stock_results is None:
+            st.markdown(
+                """
+                <div style="padding-bottom: 16px;">
+                    <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 26px 20px; text-align: center;">
+                        <div style="font-size: 28px; margin-bottom: 8px;">🎬</div>
+                        <div style="font-size: 0.88rem; font-weight: 500; color: #d1d5db;">Footage Gallery Ready</div>
+                        <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Search results and clip previews will appear here.</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f"""
+                <div class="status-banner-card" style="margin-top: 4px; margin-bottom: 12px; padding: 10px 14px;">
+                    <div class="status-banner-icon" style="width: 26px; height: 26px; font-size: 14px;">✓</div>
+                    <div>
+                        <div class="status-banner-title" style="font-size: 0.84rem;">Stock footage search completed.</div>
+                        <div class="status-banner-desc" style="font-size: 0.73rem;">Found {len(stock_results)} relevant video clip{'s' if len(stock_results) != 1 else ''} from Pixabay.</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            if len(stock_results) == 0:
+                st.markdown(
+                    """
+                    <div style="padding-bottom: 16px;">
+                        <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 20px; text-align: center; margin-top: 10px;">
+                            <div style="font-size: 0.85rem; color: #9ca3af;">No matching stock footage found for the generated keywords.</div>
+                            <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Try generating new keywords or editing the transcript.</div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                grid_col1, grid_col2 = st.columns(2, gap="medium")
+                for idx, clip in enumerate(stock_results):
+                    target_col = grid_col1 if (idx % 2 == 0) else grid_col2
+                    with target_col:
+                        is_sel = bool(selected_clip and selected_clip.get("id") == clip.get("id"))
+                        sel_class = " selected" if is_sel else ""
+                        sel_badge_html = '<span style="background: #10b981; color: #0b0d14; font-size: 0.7rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; margin-left: 6px;">✓ SELECTED</span>' if is_sel else ""
+
+                        thumb_html = ""
+                        if clip.get("thumbnail_url"):
+                            safe_thumb = html.escape(clip["thumbnail_url"])
+                            thumb_html = (
+                                f'<div class="stock-card-thumb-wrap">'
+                                f'<img src="{safe_thumb}" alt="Clip thumbnail" loading="lazy" />'
+                                f'<span class="stock-badge-res">{html.escape(clip.get("resolution", "HD"))}</span>'
+                                f'<span class="stock-badge-duration">{html.escape(clip.get("duration_formatted", "00:00"))}</span>'
+                                f'</div>'
+                            )
+
+                        safe_tags = html.escape(str(clip.get("tags", "")).strip())
+                        safe_kw = html.escape(str(clip.get("keyword", "")).strip())
+
+                        card_header_html = (
+                            f'<div class="stock-card{sel_class}">'
+                            f'{thumb_html}'
+                            f'<div class="stock-meta-row">'
+                            f'<span style="font-size: 0.76rem; font-weight: 600; color: #a78bfa;">🔍 {safe_kw}</span>'
+                            f'{sel_badge_html}'
+                            f'</div>'
+                            f'<div class="stock-tags-text" title="{safe_tags}">{safe_tags}</div>'
+                            f'</div>'
+                        )
+                        st.markdown(card_header_html, unsafe_allow_html=True)
+
+                        if clip.get("preview_url"):
+                            with st.expander(f"▶ Preview Clip #{clip.get('id')}", expanded=False):
+                                st.video(clip["preview_url"])
+
+                        btn_label = "✓ Selected for B-roll" if is_sel else "Select Clip"
+                        btn_type = "primary" if is_sel else "secondary"
+                        if st.button(
+                            btn_label,
+                            key=f"broll_select_clip_{clip.get('id')}_{idx}",
+                            type=btn_type,
+                            use_container_width=True,
+                        ):
+                            st.session_state.broll_selected_clip = clip
+                            st.rerun()
+
+                        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+
+                st.markdown("<div style='padding-bottom: 8px;'></div>", unsafe_allow_html=True)
 
     # -------------------------------------------------------------------------
     # CARD 4: B-roll Placement & Timeline
