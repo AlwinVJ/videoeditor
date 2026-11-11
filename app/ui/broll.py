@@ -1,3 +1,4 @@
+import html
 from pathlib import Path
 import shutil
 import uuid
@@ -5,6 +6,7 @@ import streamlit as st
 
 from core.utils import generate_safe_filename, get_file_fingerprint
 from core.video_io import get_video_metadata
+from core.transcription import transcribe_video, format_segment_time
 
 
 def save_broll_upload(uploaded_file, temp_dir: Path) -> Path:
@@ -138,6 +140,20 @@ def render_broll_page(temp_dir: Path = None):
         st.session_state.broll_input_video = str(editor_processed)
         st.session_state.broll_source = "transferred"
         current_broll_video = str(editor_processed)
+
+    # Track video identity (fingerprint) to automatically invalidate old transcripts
+    current_video_id = None
+    if current_broll_video and Path(current_broll_video).exists():
+        stat_info = Path(current_broll_video).stat()
+        current_video_id = f"{current_broll_video}_{stat_info.st_size}_{stat_info.st_mtime}"
+
+    cached_video_id = st.session_state.get("broll_transcript_video_id")
+    if cached_video_id and cached_video_id != current_video_id:
+        st.session_state.broll_transcript = None
+        st.session_state.broll_transcript_video_id = None
+        st.session_state.broll_transcription_error = None
+    if current_video_id and st.session_state.get("broll_transcription_error") == "Please select or upload a video before creating a transcript.":
+        st.session_state.broll_transcription_error = None
 
     # =========================================================================
     # 3. INPUT VIDEO SECTION CARD
@@ -312,27 +328,132 @@ def render_broll_page(temp_dir: Path = None):
         # ---------------------------------------------------------------------
         # CARD 1: Video Transcription
         # ---------------------------------------------------------------------
+        st.markdown('<div class="editor-card">', unsafe_allow_html=True)
+
+        c1_head_col1, c1_head_col2 = st.columns([0.62, 0.38])
+        with c1_head_col1:
+            st.markdown(
+                """
+                <div class="card-title-group" style="display: flex; align-items: center; min-height: 38px;">
+                    <div class="card-step-badge">1</div>
+                    <div class="card-title-text">Video Transcription</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with c1_head_col2:
+            create_transcript_clicked = st.button(
+                "Create Transcript",
+                key="broll_create_transcript_btn",
+                type="primary",
+                use_container_width=True,
+            )
+
         st.markdown(
             """
-            <div class="editor-card">
-                <div class="editor-card-header">
-                    <div class="card-title-group">
-                        <div class="card-step-badge">1</div>
-                        <div class="card-title-text">Video Transcription</div>
+            <p style="font-size: 0.82rem; color: #8b90a7; margin-top: 4px; margin-bottom: 14px;">
+                Extract audio and generate timestamped transcript segments for accurate B-roll matching.
+            </p>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        has_active_video = bool(
+            current_broll_video
+            and Path(current_broll_video).exists()
+            and Path(current_broll_video).stat().st_size > 0
+        )
+
+        if create_transcript_clicked:
+            if not has_active_video:
+                st.session_state.broll_transcription_error = (
+                    "Please select or upload a video before creating a transcript."
+                )
+                st.session_state.broll_transcript = None
+                st.rerun()
+            else:
+                with st.spinner("Transcribing video... Please wait."):
+                    try:
+                        segments = transcribe_video(Path(current_broll_video), temp_dir)
+                        st.session_state.broll_transcript = segments
+                        st.session_state.broll_transcript_video_id = current_video_id
+                        st.session_state.broll_transcription_error = None
+                        st.rerun()
+                    except Exception as e:
+                        st.session_state.broll_transcription_error = str(e)
+                        st.rerun()
+
+        err_msg = st.session_state.get("broll_transcription_error")
+        if err_msg:
+            st.markdown(
+                f"""
+                <div class="status-banner-card error" style="margin-top: 4px; margin-bottom: 12px;">
+                    <div class="status-banner-icon error">✕</div>
+                    <div>
+                        <div class="status-banner-title">Transcription failed</div>
+                        <div class="status-banner-desc">{err_msg}</div>
                     </div>
                 </div>
-                <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
-                    Extract audio and generate timestamped transcript segments for accurate B-roll matching.
-                </p>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        transcript = st.session_state.get("broll_transcript")
+
+        if transcript is None:
+            st.markdown(
+                """
                 <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 26px 20px; text-align: center;">
                     <div style="font-size: 28px; margin-bottom: 8px;">🎙️</div>
                     <div style="font-size: 0.88rem; font-weight: 500; color: #d1d5db;">Transcript Workspace Ready</div>
                     <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Your video transcript will appear here.</div>
                 </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f"""
+                <div class="status-banner-card" style="margin-top: 4px; margin-bottom: 12px; padding: 10px 14px;">
+                    <div class="status-banner-icon" style="width: 26px; height: 26px; font-size: 14px;">✓</div>
+                    <div>
+                        <div class="status-banner-title" style="font-size: 0.84rem;">Transcription completed successfully.</div>
+                        <div class="status-banner-desc" style="font-size: 0.73rem;">Extracted {len(transcript)} timestamped segment{'s' if len(transcript) != 1 else ''}.</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            if len(transcript) == 0:
+                st.markdown(
+                    """
+                    <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 20px; text-align: center; margin-top: 10px;">
+                        <div style="font-size: 0.85rem; color: #9ca3af;">No speech detected in this video.</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                segment_cards = []
+                for seg in transcript:
+                    time_label = format_segment_time(seg["start"], seg["end"])
+                    safe_text = html.escape(str(seg.get("text", "")).strip())
+                    segment_cards.append(
+                        f'<div style="background: #10121c; border: 1px solid #1f2336; border-radius: 8px; padding: 10px 14px;">'
+                        f'<div style="font-size: 0.74rem; font-weight: 600; color: #a78bfa; font-family: monospace; letter-spacing: 0.05em;">{time_label}</div>'
+                        f'<div style="font-size: 0.83rem; color: #e5e7eb; margin-top: 4px; line-height: 1.4;">{safe_text}</div>'
+                        f'</div>'
+                    )
+
+                transcript_html = (
+                    '<div style="max-height: 280px; overflow-y: auto; padding-right: 6px; display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">'
+                    + "".join(segment_cards)
+                    + '</div>'
+                )
+                st.markdown(transcript_html, unsafe_allow_html=True)
+
+        st.markdown("</div>", unsafe_allow_html=True)  # Close Card 1
 
         # ---------------------------------------------------------------------
         # CARD 2: AI Keyword Generation
@@ -345,6 +466,7 @@ def render_broll_page(temp_dir: Path = None):
                         <div class="card-step-badge">2</div>
                         <div class="card-title-text">AI Keyword Generation</div>
                     </div>
+                    <span style="font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; background: rgba(124, 92, 252, 0.15); color: #a78bfa; border: 1px solid rgba(124, 92, 252, 0.3);">Generate Keywords</span>
                 </div>
                 <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
                     Generate context-aware visual search queries and footage suggestions for each transcript segment.
@@ -371,6 +493,7 @@ def render_broll_page(temp_dir: Path = None):
                         <div class="card-step-badge">3</div>
                         <div class="card-title-text">Stock Footage Search</div>
                     </div>
+                    <span style="font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; background: rgba(124, 92, 252, 0.15); color: #a78bfa; border: 1px solid rgba(124, 92, 252, 0.3);">Search Footage</span>
                 </div>
                 <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
                     Search free video repositories and select high-resolution B-roll clips.

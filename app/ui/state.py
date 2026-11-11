@@ -58,6 +58,9 @@ def initialize_session_state():
         "broll_source": None,  # "transferred" | "uploaded"
         "broll_preview_active": False,
         "broll_uploader_key": "broll_uploader_init",
+        "broll_transcript": None,
+        "broll_transcript_video_id": None,
+        "broll_transcription_error": None,
     }
 
     for key, value in defaults.items():
@@ -109,6 +112,9 @@ def reset_and_clear_all(temp_dir: Path):
     st.session_state.broll_source = None
     st.session_state.broll_preview_active = False
     st.session_state.broll_uploader_key = str(uuid.uuid4())[:8]
+    st.session_state.broll_transcript = None
+    st.session_state.broll_transcript_video_id = None
+    st.session_state.broll_transcription_error = None
 
     # Force a fresh file uploader widget key
     st.session_state.uploader_key = str(uuid.uuid4())
