@@ -402,11 +402,13 @@ def render_broll_page(temp_dir: Path = None):
         if transcript is None:
             st.markdown(
                 """
-                <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 26px 20px; text-align: center;">
-                    <div style="font-size: 28px; margin-bottom: 8px;">🎙️</div>
-                    <div style="font-size: 0.88rem; font-weight: 500; color: #d1d5db;">Transcript Workspace Ready</div>
-                    <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Your video transcript will appear here.</div>
-                </div>
+                <div style="padding-bottom: 16px;">  <!-- CHANGED -->
+                    <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 26px 20px; text-align: center;">
+                        <div style="font-size: 28px; margin-bottom: 8px;">🎙️</div>
+                        <div style="font-size: 0.88rem; font-weight: 500; color: #d1d5db;">Transcript Workspace Ready</div>
+                        <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Your video transcript will appear here.</div>
+                    </div>
+                </div>  <!-- CHANGED -->
                 """,
                 unsafe_allow_html=True,
             )
@@ -427,9 +429,11 @@ def render_broll_page(temp_dir: Path = None):
             if len(transcript) == 0:
                 st.markdown(
                     """
-                    <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 20px; text-align: center; margin-top: 10px;">
-                        <div style="font-size: 0.85rem; color: #9ca3af;">No speech detected in this video.</div>
-                    </div>
+                    <div style="padding-bottom: 16px;">  <!-- CHANGED -->
+                        <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 20px; text-align: center; margin-top: 10px;">
+                            <div style="font-size: 0.85rem; color: #9ca3af;">No speech detected in this video.</div>
+                        </div>
+                    </div>  <!-- CHANGED -->
                     """,
                     unsafe_allow_html=True,
                 )
@@ -446,9 +450,11 @@ def render_broll_page(temp_dir: Path = None):
                     )
 
                 transcript_html = (
-                    '<div style="max-height: 280px; overflow-y: auto; padding-right: 6px; display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">'
+                    '<div style="padding-bottom: 16px;">'  # CHANGED (opening wrapper)
+                    '<div style="max-height: 280px; overflow-y: auto; padding-right: 6px; padding-bottom: 8px; display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">'
                     + "".join(segment_cards)
                     + '</div>'
+                    '</div>'  # CHANGED (closing wrapper)
                 )
                 st.markdown(transcript_html, unsafe_allow_html=True)
 
