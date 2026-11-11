@@ -1,14 +1,132 @@
 import json
+import re
 import socket
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from core.config import get_pixabay_api_key
 
 PIXABAY_VIDEO_API_URL = "https://pixabay.com/api/videos/"
 DEFAULT_REQUEST_TIMEOUT = 12
+
+SEGMENT_COLORS = [
+    {"primary": "#8b5cf6", "light": "#c4b5fd", "bg": "rgba(139, 92, 246, 0.18)", "border": "#7c3aed"},  # Violet
+    {"primary": "#06b6d4", "light": "#67e8f9", "bg": "rgba(6, 182, 212, 0.18)", "border": "#0891b2"},   # Cyan
+    {"primary": "#10b981", "light": "#6ee7b7", "bg": "rgba(16, 185, 129, 0.18)", "border": "#059669"},  # Emerald
+    {"primary": "#f59e0b", "light": "#fde68a", "bg": "rgba(245, 158, 11, 0.18)", "border": "#d97706"},  # Amber
+    {"primary": "#ec4899", "light": "#fbcfe8", "bg": "rgba(236, 72, 153, 0.18)", "border": "#db2777"},  # Pink
+    {"primary": "#3b82f6", "light": "#93c5fd", "bg": "rgba(59, 130, 246, 0.18)", "border": "#2563eb"},  # Blue
+]
+
+STOPWORDS = {"in", "on", "at", "to", "for", "of", "and", "the", "a", "an", "is", "it", "with", "by", "as", "or", "from"}
+
+
+def get_segment_color(segment_index: int) -> Dict[str, str]:
+    """Return a distinct, accessible color configuration for a transcript segment index."""
+    safe_idx = max(0, int(segment_index or 0))
+    return SEGMENT_COLORS[safe_idx % len(SEGMENT_COLORS)]
+
+
+def calculate_timeline_percentages(
+    start: float,
+    end: float,
+    total_duration: float,
+) -> Tuple[float, float]:
+    """
+    Calculate the left offset and width percentage of a segment along a video timeline.
+
+    Returns:
+        (left_percentage, width_percentage) clamped safely between 0% and 100%.
+    """
+    if not total_duration or total_duration <= 0:
+        return 0.0, 0.0
+
+    safe_start = max(0.0, min(total_duration, float(start)))
+    safe_end = max(safe_start, min(total_duration, float(end)))
+
+    left_pct = (safe_start / total_duration) * 100.0
+    # Minimum width of 2.5% so short segments remain visually perceptible
+    raw_width = ((safe_end - safe_start) / total_duration) * 100.0
+    width_pct = max(2.5, min(100.0 - left_pct, raw_width))
+
+    return round(left_pct, 2), round(width_pct, 2)
+
+
+def match_clip_to_transcript(
+    clip_keyword: str,
+    transcript: Optional[List[Dict[str, Any]]],
+) -> Optional[Dict[str, Any]]:
+    """
+    Find the best matching transcript segment for a stock footage search keyword.
+
+    Args:
+        clip_keyword: Search keyword string associated with the stock clip.
+        transcript: List of timestamped segment dicts with 'start', 'end', and 'text'.
+
+    Returns:
+        Segment match dictionary with 'segment_index', 'start', 'end', 'duration', and 'text',
+        or None if no confident match exists.
+    """
+    if not transcript or not isinstance(transcript, list):
+        return None
+
+    cleaned_kw = str(clip_keyword or "").strip().lower()
+    if not cleaned_kw:
+        return None
+
+    all_tokens = re.findall(r"\b\w+\b", cleaned_kw)
+    content_tokens = [w for w in all_tokens if w not in STOPWORDS and len(w) > 2]
+    tokens = content_tokens or [w for w in all_tokens if len(w) > 1]
+    if not tokens:
+        tokens = [cleaned_kw]
+
+    best_segment = None
+    best_index = -1
+    best_score = 0.0
+
+    for idx, seg in enumerate(transcript):
+        if not isinstance(seg, dict):
+            continue
+        start = seg.get("start")
+        end = seg.get("end")
+        text = str(seg.get("text", "")).strip()
+
+        if start is None or end is None or float(end) <= float(start):
+            continue
+
+        seg_text_lower = text.lower()
+        seg_words = set(re.findall(r"\b\w+\b", seg_text_lower))
+        score = 0.0
+
+        # Exact phrase match gives highest confidence
+        if re.search(r"\b" + re.escape(cleaned_kw) + r"\b", seg_text_lower):
+            score = 100.0 + len(cleaned_kw)
+        else:
+            # Word-level overlap match (whole words only)
+            matches = sum(1.0 for t in tokens if t in seg_words)
+            if matches > 0:
+                score = (matches / len(tokens)) * 10.0
+
+        if score > best_score:
+            best_score = score
+            best_segment = seg
+            best_index = idx
+
+    if best_segment and best_score > 0.0:
+        start_val = float(best_segment["start"])
+        end_val = float(best_segment["end"])
+        return {
+            "segment_index": best_index,
+            "start": start_val,
+            "end": end_val,
+            "duration": max(0.1, end_val - start_val),
+            "text": str(best_segment.get("text", "")).strip(),
+            "score": best_score,
+        }
+
+    return None
 
 
 def format_duration(seconds: float | int) -> str:

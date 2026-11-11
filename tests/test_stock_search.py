@@ -16,6 +16,9 @@ from core.stock import (
     format_duration,
     search_pixabay_videos,
     search_stock_footage,
+    match_clip_to_transcript,
+    get_segment_color,
+    calculate_timeline_percentages,
     PIXABAY_VIDEO_API_URL,
 )
 from app.ui.state import initialize_session_state, reset_and_clear_all
@@ -374,8 +377,128 @@ def run_stock_search_tests():
     assert "Planned: FFmpeg Overlay" in broll_code
     print("[PASSED] TEST 11: Cards 1, 2, and 4 preserved with strict boundaries.")
 
+    # -------------------------------------------------------------
+    # TEST 12: Clip to transcript segment matching & fallback
+    # -------------------------------------------------------------
+    print("\n[TEST 12] Testing match_clip_to_transcript...")
+    transcript_sample = [
+        {"start": 0.0, "end": 4.5, "text": "Welcome to our video on modern workspace productivity."},
+        {"start": 4.5, "end": 9.2, "text": "Here our team is collaborating in an open office."},
+        {"start": 9.2, "end": 15.0, "text": "We review real-time charts on an interactive dashboard."},
+    ]
+
+    # Exact keyword match
+    match1 = match_clip_to_transcript("open office", transcript_sample)
+    assert match1 is not None
+    assert match1["segment_index"] == 1
+    assert match1["start"] == 4.5
+    assert match1["end"] == 9.2
+    assert "collaborating in an open office" in match1["text"]
+
+    # Token overlap match
+    match2 = match_clip_to_transcript("workspace productivity", transcript_sample)
+    assert match2 is not None
+    assert match2["segment_index"] == 0
+    assert match2["start"] == 0.0
+
+    # No match -> returns None (does not invent arbitrary placement)
+    match_none = match_clip_to_transcript("flying airplane sunset", transcript_sample)
+    assert match_none is None, "Non-matching keyword must return None"
+
+    # Missing transcript -> returns None
+    assert match_clip_to_transcript("open office", None) is None
+    assert match_clip_to_transcript("open office", []) is None
+    print("[PASSED] TEST 12: Clip to transcript matching operates accurately with fallbacks.")
+
+    # -------------------------------------------------------------
+    # TEST 13: Timeline percentage calculations and color palette
+    # -------------------------------------------------------------
+    print("\n[TEST 13] Testing calculate_timeline_percentages and color palette...")
+    l_pct, w_pct = calculate_timeline_percentages(10.0, 20.0, 100.0)
+    assert l_pct == 10.0
+    assert w_pct == 10.0
+
+    # Minimum width guard for very short segments
+    l_pct, w_pct = calculate_timeline_percentages(0.0, 0.5, 100.0)
+    assert l_pct == 0.0
+    assert w_pct >= 2.5, "Short segments must have a minimum perceptible width"
+
+    # Zero total duration guard
+    assert calculate_timeline_percentages(0.0, 5.0, 0.0) == (0.0, 0.0)
+
+    # Color distinction for different segments
+    c0 = get_segment_color(0)
+    c1 = get_segment_color(1)
+    assert c0["primary"] != c1["primary"], "Different segment indices must have distinguishable colors"
+    assert "light" in c0 and "bg" in c0 and "border" in c0
+    print("[PASSED] TEST 13: Timeline percentages and segment colors verified.")
+
+    # -------------------------------------------------------------
+    # TEST 14: Card 3 Timeline UI rendering and fallback states
+    # -------------------------------------------------------------
+    print("\n[TEST 14] Testing timeline HTML elements in Card 3 rendering...")
+    mock_state = MockSessionState()
+    stat_info = dummy_video.stat()
+    vid_id = f"{dummy_video}_{stat_info.st_size}_{stat_info.st_mtime}"
+
+    with patch.object(st, "session_state", mock_state):
+        initialize_session_state()
+        mock_state.broll_input_video = str(dummy_video)
+        mock_state.broll_transcript = transcript_sample
+        mock_state.broll_transcript_video_id = vid_id
+        mock_state.broll_keywords = ["open office", "outer galaxy"]
+        mock_state.broll_keywords_video_id = vid_id
+
+        # Clip A: matches transcript segment 1 ("open office")
+        clip_matched = {
+            "id": 101,
+            "tags": "office, work",
+            "duration": 10,
+            "duration_formatted": "00:10",
+            "resolution": "1920×1080",
+            "thumbnail_url": "https://example.com/thumb1.jpg",
+            "preview_url": "https://example.com/prev1.mp4",
+            "keyword": "open office",
+        }
+        # Clip B: unmapped keyword
+        clip_unmapped = {
+            "id": 102,
+            "tags": "space, stars",
+            "duration": 8,
+            "duration_formatted": "00:08",
+            "resolution": "1920×1080",
+            "thumbnail_url": "https://example.com/thumb2.jpg",
+            "preview_url": "https://example.com/prev2.mp4",
+            "keyword": "outer galaxy deep space",
+        }
+        mock_state.broll_stock_results = [clip_matched, clip_unmapped]
+        mock_state.broll_stock_video_id = vid_id
+
+        rendered_markdowns = []
+        def mock_markdown(text, **kwargs):
+            rendered_markdowns.append(str(text))
+
+        with patch.object(st, "markdown", side_effect=mock_markdown), \
+             patch.object(st, "button", return_value=False), \
+             patch.object(st, "expander"):
+            try:
+                render_broll_page(temp_dir)
+            except Exception:
+                pass
+
+        full_output = "\n".join(rendered_markdowns)
+        # Master overview timeline must be present
+        assert "Original Video Timeline & B-roll Placements" in full_output
+        # Matched placement must be present with range
+        assert "Suggested Placement" in full_output
+        assert "00:04 - 00:09" in full_output
+        assert "collaborating in an open office" in full_output
+        # Fallback state must be present for unmapped clip
+        assert "Timeline placement: No direct transcript timestamp match" in full_output
+    print("[PASSED] TEST 14: Master timeline and per-clip placement render with fallbacks.")
+
     print("\n==================================================")
-    print("ALL STOCK FOOTAGE SEARCH TESTS PASSED (11/11)!")
+    print("ALL STOCK FOOTAGE SEARCH TESTS PASSED (14/14)!")
     print("==================================================")
 
 

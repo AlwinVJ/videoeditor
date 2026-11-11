@@ -8,7 +8,13 @@ from core.utils import generate_safe_filename, get_file_fingerprint
 from core.video_io import get_video_metadata
 from core.transcription import transcribe_video, format_segment_time
 from core.keywords import generate_keywords_from_transcript
-from core.stock import search_stock_footage
+from core.stock import (
+    search_stock_footage,
+    match_clip_to_transcript,
+    get_segment_color,
+    calculate_timeline_percentages,
+    format_duration,
+)
 
 
 def save_broll_upload(uploaded_file, temp_dir: Path) -> Path:
@@ -723,9 +729,75 @@ def render_broll_page(temp_dir: Path = None):
                     unsafe_allow_html=True,
                 )
             else:
+                total_video_duration = 0.0
+                if current_broll_video and Path(current_broll_video).exists():
+                    try:
+                        meta = get_video_metadata(Path(current_broll_video))
+                        total_video_duration = float(meta.get("duration", 0.0) or 0.0)
+                    except Exception:
+                        pass
+                if total_video_duration <= 0.0 and transcript:
+                    ends = [float(s.get("end", 0.0)) for s in transcript if isinstance(s, dict) and "end" in s]
+                    if ends:
+                        total_video_duration = max(ends)
+
+                # Pre-calculate matching transcript segment for each clip
+                clip_matches = [
+                    match_clip_to_transcript(c.get("keyword", ""), transcript)
+                    for c in stock_results
+                ]
+
+                # 1. Master Original Video Timeline Overview
+                if total_video_duration > 0.0:
+                    master_blocks = []
+                    legend_pills = []
+                    for idx, (c, m) in enumerate(zip(stock_results, clip_matches)):
+                        if m:
+                            l_pct, w_pct = calculate_timeline_percentages(
+                                m["start"], m["end"], total_video_duration
+                            )
+                            col = get_segment_color(m["segment_index"])
+                            p_range = f"{format_duration(m['start'])} - {format_duration(m['end'])}"
+                            clip_id = c.get("id")
+                            c_kw = html.escape(c.get("keyword", ""))
+                            master_blocks.append(
+                                f'<div style="position: absolute; left: {l_pct}%; width: {w_pct}%; height: 100%; '
+                                f'background: {col["primary"]}; opacity: 0.88; border-right: 1px solid rgba(255,255,255,0.4); '
+                                f'display: flex; align-items: center; justify-content: center; font-size: 0.65rem; color: #ffffff; font-weight: 700;" '
+                                f'title="Clip #{clip_id} ({p_range})">#{idx + 1}</div>'
+                            )
+                            legend_pills.append(
+                                f'<span style="background: {col["bg"]}; border: 1px solid {col["border"]}; color: {col["light"]}; '
+                                f'font-size: 0.70rem; padding: 2px 8px; border-radius: 4px; font-weight: 600;">'
+                                f'#{idx + 1}: {p_range} ({c_kw})</span>'
+                            )
+
+                    overview_html = (
+                        f'<div style="background: #0d0f17; border: 1px solid #1f2336; border-radius: 12px; padding: 14px 16px; margin-top: 4px; margin-bottom: 16px;">'
+                        f'<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">'
+                        f'<div style="display: flex; align-items: center; gap: 8px;">'
+                        f'<span style="font-size: 0.95rem;">⏱️</span>'
+                        f'<span style="font-size: 0.86rem; font-weight: 600; color: #ffffff;">Original Video Timeline & B-roll Placements</span>'
+                        f'</div>'
+                        f'<span style="font-size: 0.76rem; color: #a78bfa; font-weight: 600; font-family: monospace;">Total Duration: {format_duration(total_video_duration)}</span>'
+                        f'</div>'
+                        f'<div style="position: relative; width: 100%; height: 22px; background: #161825; border: 1px solid #252a3f; border-radius: 6px; overflow: hidden; margin-bottom: 4px;">'
+                        + ("".join(master_blocks) if master_blocks else '<div style="font-size: 0.72rem; color: #8b90a7; text-align: center; line-height: 22px;">No transcript timestamps available for timeline placement</div>')
+                        + f'</div>'
+                        f'<div style="display: flex; justify-content: space-between; font-size: 0.66rem; color: #6b7280; font-family: monospace; margin-bottom: 8px;">'
+                        f'<span>00:00</span>'
+                        f'<span>{format_duration(total_video_duration)}</span>'
+                        f'</div>'
+                        + (f'<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px;">{"".join(legend_pills)}</div>' if legend_pills else "")
+                        + f'</div>'
+                    )
+                    st.markdown(overview_html, unsafe_allow_html=True)
+
+                # 2. Stock Footage Gallery with Individual Timeline Placements
                 grid_col1, grid_col2 = st.columns(2, gap="medium")
                 for idx, clip in enumerate(stock_results):
                     target_col = grid_col1 if (idx % 2 == 0) else grid_col2
+                    match = clip_matches[idx]
                     with target_col:
                         is_sel = bool(selected_clip and selected_clip.get("id") == clip.get("id"))
                         sel_class = " selected" if is_sel else ""
@@ -745,14 +817,53 @@ def render_broll_page(temp_dir: Path = None):
                         safe_tags = html.escape(str(clip.get("tags", "")).strip())
                         safe_kw = html.escape(str(clip.get("keyword", "")).strip())
 
+                        # Build individual visual timeline representation
+                        if match and total_video_duration > 0.0:
+                            l_pct, w_pct = calculate_timeline_percentages(
+                                match["start"], match["end"], total_video_duration
+                            )
+                            color = get_segment_color(match["segment_index"])
+                            p_range = f"{format_duration(match['start'])} - {format_duration(match['end'])}"
+                            dur_label = f"{round(match['duration'], 1)}s"
+                            snippet = html.escape(
+                                match["text"][:75] + ("..." if len(match["text"]) > 75 else "")
+                            )
+
+                            timeline_box_html = (
+                                f'<div style="background: #0d0f17; border: 1px solid #1a1d2e; border-radius: 8px; padding: 9px 12px; margin-top: 8px; margin-bottom: 10px;">'
+                                f'<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">'
+                                f'<span style="font-size: 0.73rem; font-weight: 600; color: {color["light"]};">⏱️ Suggested Placement</span>'
+                                f'<span style="font-size: 0.72rem; font-weight: 700; color: #ffffff; font-family: monospace; background: {color["bg"]}; border: 1px solid {color["border"]}; padding: 2px 7px; border-radius: 4px;">{p_range} ({dur_label})</span>'
+                                f'</div>'
+                                f'<div style="position: relative; width: 100%; height: 8px; background: #161825; border: 1px solid #23273c; border-radius: 4px; overflow: hidden; margin-bottom: 4px;">'
+                                f'<div style="position: absolute; left: {l_pct}%; width: {w_pct}%; height: 100%; background: {color["primary"]}; border-radius: 2px;"></div>'
+                                f'</div>'
+                                f'<div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: #6b7280; font-family: monospace; margin-bottom: 6px;">'
+                                f'<span>00:00</span>'
+                                f'<span>{format_duration(total_video_duration)}</span>'
+                                f'</div>'
+                                f'<div style="font-size: 0.71rem; color: #9ca3af; font-style: italic; line-height: 1.3;" title="{html.escape(match["text"])}">'
+                                f'"{snippet}"'
+                                f'</div>'
+                                f'</div>'
+                            )
+                        else:
+                            timeline_box_html = (
+                                f'<div style="background: #0d0f17; border: 1px dashed #23273c; border-radius: 8px; padding: 9px 12px; margin-top: 8px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">'
+                                f'<span style="font-size: 0.75rem; color: #6b7280;">⏱️</span>'
+                                f'<span style="font-size: 0.72rem; color: #8b90a7;">Timeline placement: No direct transcript timestamp match</span>'
+                                f'</div>'
+                            )
+
                         card_header_html = (
                             f'<div class="stock-card{sel_class}">'
                             f'{thumb_html}'
                             f'<div class="stock-meta-row">'
-                            f'<span style="font-size: 0.76rem; font-weight: 600; color: #a78bfa;">🔍 {safe_kw}</span>'
+                            f'<span style="font-size: 0.76rem; font-weight: 600; color: #a78bfa;">🔍 #{idx + 1} {safe_kw}</span>'
                             f'{sel_badge_html}'
                             f'</div>'
                             f'<div class="stock-tags-text" title="{safe_tags}">{safe_tags}</div>'
+                            f'{timeline_box_html}'
                             f'</div>'
                         )
                         st.markdown(card_header_html, unsafe_allow_html=True)
