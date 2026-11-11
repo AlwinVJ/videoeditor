@@ -55,10 +55,10 @@ def render_broll_page(temp_dir: Path = None):
         OR divider
         Option B: Upload a Video (drag-and-drop / Choose Video)
     - Preview Player (if active/requested)
-    - 4 Workflow Cards (2x2 grid matching reference screenshot):
-        Card 1: Video Transcription (Planned: Groq Whisper)
-        Card 3: Stock Footage Search (Pixabay / Pexels)
+    - 4 Workflow Cards (Single-Column Vertical Layout):
+        Card 1: Video Transcription (Groq Whisper)
         Card 2: AI Keyword Generation (Planned: Groq LLM)
+        Card 3: Stock Footage Search (Pixabay / Pexels)
         Card 4: B-roll Placement & Timeline (Planned: FFmpeg Overlay)
     """
     if temp_dir is None:
@@ -318,19 +318,18 @@ def render_broll_page(temp_dir: Path = None):
         st.markdown("</div>", unsafe_allow_html=True)
 
     # =========================================================================
-    # 5. FOUR WORKFLOW CARDS (2x2 Grid Matching Reference Image)
-    # Left column: Card 1 (Video Transcription) and Card 2 (AI Keyword Generation)
-    # Right column: Card 3 (Stock Footage Search) and Card 4 (B-roll Placement & Timeline)
+    # 5. FOUR WORKFLOW SECTIONS (Single-Column Vertical Layout)
+    # 1. Video Transcription
+    # 2. AI Keyword Generation
+    # 3. Stock Footage Search
+    # 4. B-roll Placement & Timeline
     # =========================================================================
-    col_card_left, col_card_right = st.columns(2, gap="large")
 
-    with col_card_left:
-        # ---------------------------------------------------------------------
-        # CARD 1: Video Transcription
-        # ---------------------------------------------------------------------
-        st.markdown('<div class="editor-card">', unsafe_allow_html=True)
-
-        c1_head_col1, c1_head_col2 = st.columns([0.62, 0.38])
+    # -------------------------------------------------------------------------
+    # STEP 1: Video Transcription
+    # -------------------------------------------------------------------------
+    with st.container(key="broll_transcription_card", border=True):
+        c1_head_col1, c1_head_col2 = st.columns([0.78, 0.22])
         with c1_head_col1:
             st.markdown(
                 """
@@ -351,7 +350,7 @@ def render_broll_page(temp_dir: Path = None):
 
         st.markdown(
             """
-            <p style="font-size: 0.82rem; color: #8b90a7; margin-top: 4px; margin-bottom: 14px;">
+            <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
                 Extract audio and generate timestamped transcript segments for accurate B-roll matching.
             </p>
             """,
@@ -453,82 +452,80 @@ def render_broll_page(temp_dir: Path = None):
                 )
                 st.markdown(transcript_html, unsafe_allow_html=True)
 
-        st.markdown("</div>", unsafe_allow_html=True)  # Close Card 1
-
-        # ---------------------------------------------------------------------
-        # CARD 2: AI Keyword Generation
-        # ---------------------------------------------------------------------
-        st.markdown(
-            """
-            <div class="editor-card">
-                <div class="editor-card-header">
-                    <div class="card-title-group">
-                        <div class="card-step-badge">2</div>
-                        <div class="card-title-text">AI Keyword Generation</div>
-                    </div>
-                    <span style="font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; background: rgba(124, 92, 252, 0.15); color: #a78bfa; border: 1px solid rgba(124, 92, 252, 0.3);">Generate Keywords</span>
+    # -------------------------------------------------------------------------
+    # CARD 2: AI Keyword Generation
+    # -------------------------------------------------------------------------
+    st.markdown(
+        """
+        <div class="editor-card">
+            <div class="editor-card-header">
+                <div class="card-title-group">
+                    <div class="card-step-badge">2</div>
+                    <div class="card-title-text">AI Keyword Generation</div>
                 </div>
-                <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
-                    Generate context-aware visual search queries and footage suggestions for each transcript segment.
-                </p>
-                <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 26px 20px; text-align: center;">
-                    <div style="font-size: 28px; margin-bottom: 8px;">🧠</div>
-                    <div style="font-size: 0.88rem; font-weight: 500; color: #d1d5db;">AI Suggestions Ready</div>
-                    <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Automated keyword pills and search inputs will populate here.</div>
-                </div>
+                <span style="font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; background: rgba(124, 92, 252, 0.15); color: #a78bfa; border: 1px solid rgba(124, 92, 252, 0.3);">Generate Keywords</span>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with col_card_right:
-        # ---------------------------------------------------------------------
-        # CARD 3: Stock Footage Search
-        # ---------------------------------------------------------------------
-        st.markdown(
-            """
-            <div class="editor-card">
-                <div class="editor-card-header">
-                    <div class="card-title-group">
-                        <div class="card-step-badge">3</div>
-                        <div class="card-title-text">Stock Footage Search</div>
-                    </div>
-                    <span style="font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; background: rgba(124, 92, 252, 0.15); color: #a78bfa; border: 1px solid rgba(124, 92, 252, 0.3);">Search Footage</span>
-                </div>
-                <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
-                    Search free video repositories and select high-resolution B-roll clips.
-                </p>
-                <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 26px 20px; text-align: center;">
-                    <div style="font-size: 28px; margin-bottom: 8px;">🎬</div>
-                    <div style="font-size: 0.88rem; font-weight: 500; color: #d1d5db;">Footage Gallery Ready</div>
-                    <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Search results and clip previews will appear here.</div>
-                </div>
+            <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
+                Generate context-aware visual search queries and footage suggestions for each transcript segment.
+            </p>
+            <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 26px 20px; text-align: center;">
+                <div style="font-size: 28px; margin-bottom: 8px;">🧠</div>
+                <div style="font-size: 0.88rem; font-weight: 500; color: #d1d5db;">AI Suggestions Ready</div>
+                <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Automated keyword pills and search inputs will populate here.</div>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-        # ---------------------------------------------------------------------
-        # CARD 4: B-roll Placement & Timeline
-        # ---------------------------------------------------------------------
-        st.markdown(
-            """
-            <div class="editor-card">
-                <div class="editor-card-header">
-                    <div class="card-title-group">
-                        <div class="card-step-badge">4</div>
-                        <div class="card-title-text">B-roll Placement & Timeline</div>
-                    </div>
+    # -------------------------------------------------------------------------
+    # CARD 3: Stock Footage Search
+    # -------------------------------------------------------------------------
+    st.markdown(
+        """
+        <div class="editor-card">
+            <div class="editor-card-header">
+                <div class="card-title-group">
+                    <div class="card-step-badge">3</div>
+                    <div class="card-title-text">Stock Footage Search</div>
                 </div>
-                <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
-                    Position selected stock clips at specific start, middle, or end timestamps.
-                </p>
-                <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 26px 20px; text-align: center;">
-                    <div style="font-size: 28px; margin-bottom: 8px;">⏱️</div>
-                    <div style="font-size: 0.88rem; font-weight: 500; color: #d1d5db;">Timeline Editor Ready</div>
-                    <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Multi-track visual timeline and overlay preview will render here.</div>
-                </div>
+                <span style="font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; background: rgba(124, 92, 252, 0.15); color: #a78bfa; border: 1px solid rgba(124, 92, 252, 0.3);">Search Footage</span>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
+            <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
+                Search free video repositories and select high-resolution B-roll clips.
+            </p>
+            <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 26px 20px; text-align: center;">
+                <div style="font-size: 28px; margin-bottom: 8px;">🎬</div>
+                <div style="font-size: 0.88rem; font-weight: 500; color: #d1d5db;">Footage Gallery Ready</div>
+                <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Search results and clip previews will appear here.</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # -------------------------------------------------------------------------
+    # CARD 4: B-roll Placement & Timeline
+    # -------------------------------------------------------------------------
+    st.markdown(
+        """
+        <div class="editor-card">
+            <div class="editor-card-header">
+                <div class="card-title-group">
+                    <div class="card-step-badge">4</div>
+                    <div class="card-title-text">B-roll Placement & Timeline</div>
+                </div>
+                <span style="font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; background: rgba(124, 92, 252, 0.15); color: #a78bfa; border: 1px solid rgba(124, 92, 252, 0.3);">Planned: FFmpeg Overlay</span>
+            </div>
+            <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
+                Position selected stock clips at specific start, middle, or end timestamps.
+            </p>
+            <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 26px 20px; text-align: center;">
+                <div style="font-size: 28px; margin-bottom: 8px;">⏱️</div>
+                <div style="font-size: 0.88rem; font-weight: 500; color: #d1d5db;">Timeline Editor Ready</div>
+                <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Multi-track visual timeline and overlay preview will render here.</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )

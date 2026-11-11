@@ -275,6 +275,18 @@ def apply_theme():
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
     }
 
+    /* Workflow card bordered containers (st.container border=True) matching .editor-card */
+    div.st-key-broll_transcription_card,
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.st-key-broll_transcription_card),
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: #141622 !important;
+        border: 1px solid #22263a !important;
+        border-radius: 16px !important;
+        padding: 20px !important;
+        margin-bottom: 20px !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+    }
+
     .editor-card-header {
         display: flex;
         align-items: center;
