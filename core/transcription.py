@@ -1,10 +1,10 @@
 import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from dotenv import load_dotenv
 from groq import Groq, AuthenticationError, APIConnectionError, RateLimitError, APIStatusError
 
 from core.audio import extract_audio_for_transcription, has_audio_stream
+from core.config import get_groq_api_key
 from core.utils import safe_unlink, get_file_fingerprint
 
 # Maximum audio upload size supported by Groq Whisper (25 MB)
@@ -12,14 +12,8 @@ MAX_GROQ_AUDIO_SIZE_BYTES = 25 * 1024 * 1024
 
 
 def load_groq_api_key() -> str:
-    """Load and validate the Groq API key from environment or .env file."""
-    load_dotenv()
-    key = os.environ.get("GROQ_API_KEY", "").strip()
-    if not key:
-        raise ValueError(
-            "Groq API key not found. Please ensure GROQ_API_KEY is configured in your .env file."
-        )
-    return key
+    """Load and validate the Groq API key from environment (.env) or Streamlit Secrets."""
+    return get_groq_api_key()
 
 
 def format_timestamp(seconds: float) -> str:
@@ -85,7 +79,7 @@ def transcribe_audio_with_groq(
             )
     except AuthenticationError as e:
         raise PermissionError(
-            "Groq authentication failed. Please check that your GROQ_API_KEY in .env is valid."
+            "Groq authentication failed. Please check that your GROQ_API_KEY in .env or Streamlit Secrets is valid."
         ) from e
     except RateLimitError as e:
         raise RuntimeError(
