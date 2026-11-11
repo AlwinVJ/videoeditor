@@ -278,6 +278,8 @@ def apply_theme():
     /* Workflow card bordered containers (st.container border=True) matching .editor-card */
     div.st-key-broll_transcription_card,
     div[data-testid="stVerticalBlockBorderWrapper"]:has(.st-key-broll_transcription_card),
+    div.st-key-broll_keywords_card,
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.st-key-broll_keywords_card),
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #141622 !important;
         border: 1px solid #22263a !important;
@@ -285,6 +287,32 @@ def apply_theme():
         padding: 20px !important;
         margin-bottom: 20px !important;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+    }
+
+    /* Keyword Pills in Card 2 */
+    .keyword-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(108, 92, 231, 0.12);
+        border: 1px solid rgba(167, 139, 250, 0.28);
+        border-radius: 20px;
+        padding: 6px 14px;
+        font-size: 0.82rem;
+        font-weight: 500;
+        color: #e0e7ff;
+        transition: all 0.2s ease;
+    }
+
+    .keyword-pill:hover {
+        background: rgba(108, 92, 231, 0.22);
+        border-color: rgba(167, 139, 250, 0.5);
+        color: #ffffff;
+    }
+
+    .keyword-pill-icon {
+        font-size: 0.75rem;
+        color: #a78bfa;
     }
 
     .editor-card-header {

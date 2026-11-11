@@ -7,6 +7,7 @@ import streamlit as st
 from core.utils import generate_safe_filename, get_file_fingerprint
 from core.video_io import get_video_metadata
 from core.transcription import transcribe_video, format_segment_time
+from core.keywords import generate_keywords_from_transcript
 
 
 def save_broll_upload(uploaded_file, temp_dir: Path) -> Path:
@@ -152,8 +153,18 @@ def render_broll_page(temp_dir: Path = None):
         st.session_state.broll_transcript = None
         st.session_state.broll_transcript_video_id = None
         st.session_state.broll_transcription_error = None
+        st.session_state.broll_keywords = None
+        st.session_state.broll_keywords_video_id = None
+        st.session_state.broll_keywords_error = None
+    cached_keywords_video_id = st.session_state.get("broll_keywords_video_id")
+    if cached_keywords_video_id and cached_keywords_video_id != current_video_id:
+        st.session_state.broll_keywords = None
+        st.session_state.broll_keywords_video_id = None
+        st.session_state.broll_keywords_error = None
     if current_video_id and st.session_state.get("broll_transcription_error") == "Please select or upload a video before creating a transcript.":
         st.session_state.broll_transcription_error = None
+    if st.session_state.get("broll_transcript") and st.session_state.get("broll_keywords_error") == "Please generate a video transcript before generating keywords.":
+        st.session_state.broll_keywords_error = None
 
     # =========================================================================
     # 3. INPUT VIDEO SECTION CARD
@@ -459,30 +470,131 @@ def render_broll_page(temp_dir: Path = None):
                 st.markdown(transcript_html, unsafe_allow_html=True)
 
     # -------------------------------------------------------------------------
-    # CARD 2: AI Keyword Generation
+    # STEP 2: AI Keyword Generation
     # -------------------------------------------------------------------------
-    st.markdown(
-        """
-        <div class="editor-card">
-            <div class="editor-card-header">
-                <div class="card-title-group">
+    with st.container(key="broll_keywords_card", border=True):
+        c2_head_col1, c2_head_col2 = st.columns([0.78, 0.22])
+        with c2_head_col1:
+            st.markdown(
+                """
+                <div class="card-title-group" style="display: flex; align-items: center; min-height: 38px;">
                     <div class="card-step-badge">2</div>
                     <div class="card-title-text">AI Keyword Generation</div>
                 </div>
-                <span style="font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; background: rgba(124, 92, 252, 0.15); color: #a78bfa; border: 1px solid rgba(124, 92, 252, 0.3);">Generate Keywords</span>
-            </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with c2_head_col2:
+            generate_keywords_clicked = st.button(
+                "Generate Keywords",
+                key="broll_generate_keywords_btn",
+                type="primary",
+                use_container_width=True,
+            )
+
+        st.markdown(
+            """
             <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
                 Generate context-aware visual search queries and footage suggestions for each transcript segment.
             </p>
-            <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 26px 20px; text-align: center;">
-                <div style="font-size: 28px; margin-bottom: 8px;">🧠</div>
-                <div style="font-size: 0.88rem; font-weight: 500; color: #d1d5db;">AI Suggestions Ready</div>
-                <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Automated keyword pills and search inputs will populate here.</div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if generate_keywords_clicked:
+            transcript = st.session_state.get("broll_transcript")
+            if not transcript:
+                st.session_state.broll_keywords_error = (
+                    "Please generate a video transcript before generating keywords."
+                )
+                st.session_state.broll_keywords = None
+                st.rerun()
+            else:
+                with st.spinner("Generating visual keywords with AI... Please wait."):
+                    try:
+                        keywords = generate_keywords_from_transcript(transcript)
+                        st.session_state.broll_keywords = keywords
+                        st.session_state.broll_keywords_video_id = current_video_id
+                        st.session_state.broll_keywords_error = None
+                        st.rerun()
+                    except Exception as e:
+                        st.session_state.broll_keywords_error = str(e)
+                        st.rerun()
+
+        kw_err_msg = st.session_state.get("broll_keywords_error")
+        if kw_err_msg:
+            st.markdown(
+                f"""
+                <div class="status-banner-card error" style="margin-top: 4px; margin-bottom: 12px;">
+                    <div class="status-banner-icon error">✕</div>
+                    <div>
+                        <div class="status-banner-title">Keyword generation failed</div>
+                        <div class="status-banner-desc">{html.escape(kw_err_msg)}</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        keywords = st.session_state.get("broll_keywords")
+
+        if keywords is None:
+            st.markdown(
+                """
+                <div style="padding-bottom: 16px;">
+                    <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 26px 20px; text-align: center;">
+                        <div style="font-size: 28px; margin-bottom: 8px;">🧠</div>
+                        <div style="font-size: 0.88rem; font-weight: 500; color: #d1d5db;">AI Suggestions Ready</div>
+                        <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Automated keyword pills and search inputs will populate here.</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f"""
+                <div class="status-banner-card" style="margin-top: 4px; margin-bottom: 12px; padding: 10px 14px;">
+                    <div class="status-banner-icon" style="width: 26px; height: 26px; font-size: 14px;">✓</div>
+                    <div>
+                        <div class="status-banner-title" style="font-size: 0.84rem;">Keywords generated successfully.</div>
+                        <div class="status-banner-desc" style="font-size: 0.73rem;">Extracted {len(keywords)} visual search keyword{'s' if len(keywords) != 1 else ''}.</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            if len(keywords) == 0:
+                st.markdown(
+                    """
+                    <div style="padding-bottom: 16px;">
+                        <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 20px; text-align: center; margin-top: 10px;">
+                            <div style="font-size: 0.85rem; color: #9ca3af;">No visual keywords could be extracted from the transcript.</div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                keyword_pills = []
+                for kw in keywords:
+                    safe_kw = html.escape(str(kw).strip())
+                    keyword_pills.append(
+                        f'<div class="keyword-pill">'
+                        f'<span class="keyword-pill-icon">🔍</span>'
+                        f'<span>{safe_kw}</span>'
+                        f'</div>'
+                    )
+
+                keywords_html = (
+                    '<div style="padding-bottom: 16px;">'
+                    '<div style="max-height: 280px; overflow-y: auto; padding-right: 6px; padding-bottom: 8px; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;">'
+                    + "".join(keyword_pills)
+                    + '</div>'
+                    '</div>'
+                )
+                st.markdown(keywords_html, unsafe_allow_html=True)
 
     # -------------------------------------------------------------------------
     # CARD 3: Stock Footage Search
