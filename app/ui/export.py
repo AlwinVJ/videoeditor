@@ -145,7 +145,7 @@ def render_export_page():
                 return fh.read()
 
         st.download_button(
-            label="📥  Download Processed Video",
+            label="Download Processed Video",
             data=get_export_bytes,
             file_name=f"exported_{proc_path.name}",
             mime="video/mp4",
