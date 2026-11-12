@@ -1,6 +1,55 @@
 from pathlib import Path
+import re
 import streamlit as st
 from app.ui.state import AppState, set_state
+
+
+def generate_clean_download_filename(file_path_or_name: str | Path) -> str:
+    """
+    Generate a clean, readable filename for video export downloads.
+    Removes timestamps (e.g., _YYYYMMDD_HHMMSS) and random UUID/hex suffixes
+    (e.g., _f87e54) while preserving the module identifier, prefix structure,
+    and file extension.
+
+    Examples:
+    - 'processed_Module_24_20261112_081146_f87e54.mp4' -> 'processed_Module_24.mp4'
+    - 'processed_My_Video_20261112_081146_f87e54.mp4'  -> 'processed_My_Video.mp4'
+    - 'broll_Module_24_20261112_081146_f87e54.mp4'      -> 'broll_Module_24.mp4'
+    """
+    if not file_path_or_name:
+        return "processed_video.mp4"
+
+    path = Path(file_path_or_name)
+    stem = path.stem
+    ext = path.suffix or ".mp4"
+
+    # Strip legacy 'exported_' prefix if present
+    if stem.startswith("exported_"):
+        stem = stem[len("exported_") :]
+
+    # Strip trailing date/timestamp and optional unique hex/UUID suffix
+    # Handles: _YYYYMMDD_HHMMSS_<hex>, _YYYYMMDD-HHMMSS_<hex>, _YYYYMMDD_HHMMSS
+    clean_stem = re.sub(r"_\d{8}[-_]\d{6}(?:_[a-fA-F0-9]+)?$", "", stem)
+
+    # Strip standard UUID4 with hyphens if present
+    clean_stem = re.sub(
+        r"_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+        "",
+        clean_stem,
+    )
+
+    # Strip standalone 32-character MD5/hex hash suffix if present
+    clean_stem = re.sub(r"_[a-fA-F0-9]{32}$", "", clean_stem)
+
+    # If the clean stem doesn't have an action prefix (like processed_ or broll_),
+    # ensure standard 'processed_' prefix is maintained
+    if not (clean_stem.startswith("processed_") or clean_stem.startswith("broll_")):
+        clean_stem = f"processed_{clean_stem}"
+
+    # Fallback in case stripping left empty or whitespace
+    clean_stem = clean_stem.strip() or "processed_video"
+
+    return f"{clean_stem}{ext}"
 
 
 def render_export_page():
@@ -98,6 +147,8 @@ def render_export_page():
         st.video(str(proc_path))
         st.markdown("</div>", unsafe_allow_html=True)
 
+    clean_download_name = generate_clean_download_filename(proc_path.name)
+
     with col_details:
         st.markdown(
             f"""
@@ -110,7 +161,7 @@ def render_export_page():
                 <div style="display: flex; flex-direction: column; gap: 12px;">
                     <div style="display: flex; justify-content: space-between; font-size: 0.85rem; border-bottom: 1px solid #1f2336; padding-bottom: 8px;">
                         <span style="color: #8b90a7;">File Name:</span>
-                        <span style="color: #f1f2f6; font-weight: 500;">{proc_path.name}</span>
+                        <span style="color: #f1f2f6; font-weight: 500;">{clean_download_name}</span>
                     </div>
                     <div style="display: flex; justify-content: space-between; font-size: 0.85rem; border-bottom: 1px solid #1f2336; padding-bottom: 8px;">
                         <span style="color: #8b90a7;">File Size:</span>
@@ -147,7 +198,7 @@ def render_export_page():
         st.download_button(
             label="Download Processed Video",
             data=get_export_bytes,
-            file_name=f"exported_{proc_path.name}",
+            file_name=clean_download_name,
             mime="video/mp4",
             type="primary",
             use_container_width=True,

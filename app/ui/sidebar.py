@@ -64,7 +64,7 @@ def render_sidebar(temp_dir: Path):
         # Navigation: Export
         export_active = (current_page == "export")
         if st.button(
-            "Download processed video",
+            "Download Processed Video",
             key="nav_export_btn",
             use_container_width=True,
             type="primary" if export_active else "secondary",

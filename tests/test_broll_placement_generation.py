@@ -394,7 +394,7 @@ def run_broll_placement_tests():
     assert len(video_calls) == 1, "st.video must be called exactly once to preview rendered output"
     assert video_calls[0] == str(proc_file), "Preview player must play newly generated video"
     assert "Download Processed Video" in download_btn_params["label"], "Download button must be present"
-    assert download_btn_params["file_name"].startswith("exported_broll_"), "File name must reflect newly generated video"
+    assert download_btn_params["file_name"].startswith("broll_"), "File name must reflect newly generated video"
     assert len(download_btn_params["data"]) == proc_file.stat().st_size, "Download button data must match generated video bytes"
 
     print("[PASSED] TEST 10: Export page preview and download button verified.")
