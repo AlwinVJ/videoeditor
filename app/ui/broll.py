@@ -169,6 +169,8 @@ def render_broll_page(temp_dir: Path = None):
         st.session_state.broll_stock_video_id = None
         st.session_state.broll_stock_error = None
         st.session_state.broll_selected_clip = None
+        st.session_state.broll_selected_clips = []
+        st.session_state.broll_selected_clips_video_id = None
         st.session_state.broll_generation_error = None
         st.session_state.broll_generation_success = False
         st.session_state.broll_is_generating = False
@@ -181,6 +183,8 @@ def render_broll_page(temp_dir: Path = None):
         st.session_state.broll_stock_video_id = None
         st.session_state.broll_stock_error = None
         st.session_state.broll_selected_clip = None
+        st.session_state.broll_selected_clips = []
+        st.session_state.broll_selected_clips_video_id = None
         st.session_state.broll_generation_error = None
         st.session_state.broll_generation_success = False
         st.session_state.broll_is_generating = False
@@ -190,9 +194,16 @@ def render_broll_page(temp_dir: Path = None):
         st.session_state.broll_stock_video_id = None
         st.session_state.broll_stock_error = None
         st.session_state.broll_selected_clip = None
+        st.session_state.broll_selected_clips = []
+        st.session_state.broll_selected_clips_video_id = None
         st.session_state.broll_generation_error = None
         st.session_state.broll_generation_success = False
         st.session_state.broll_is_generating = False
+    cached_selection_video_id = st.session_state.get("broll_selected_clips_video_id")
+    if cached_selection_video_id and cached_selection_video_id != current_video_id:
+        st.session_state.broll_selected_clip = None
+        st.session_state.broll_selected_clips = []
+        st.session_state.broll_selected_clips_video_id = None
     if current_video_id and st.session_state.get("broll_transcription_error") == "Please select or upload a video before creating a transcript.":
         st.session_state.broll_transcription_error = None
     if st.session_state.get("broll_transcript") and st.session_state.get("broll_keywords_error") == "Please generate a video transcript before generating keywords.":
@@ -333,6 +344,9 @@ def render_broll_page(temp_dir: Path = None):
                         st.session_state.broll_input_video = None
                         st.session_state.broll_source = None
                     st.session_state.broll_preview_active = False
+                    st.session_state.broll_selected_clip = None
+                    st.session_state.broll_selected_clips = []
+                    st.session_state.broll_selected_clips_video_id = None
                     st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)  # Close Input Video Card
@@ -698,7 +712,23 @@ def render_broll_page(temp_dir: Path = None):
             )
 
         stock_results = st.session_state.get("broll_stock_results")
-        selected_clip = st.session_state.get("broll_selected_clip")
+
+        # Multi-clip selection synchronization
+        selected_clips = st.session_state.get("broll_selected_clips")
+        if not isinstance(selected_clips, list):
+            legacy_clip = st.session_state.get("broll_selected_clip")
+            selected_clips = [legacy_clip] if (legacy_clip and isinstance(legacy_clip, dict)) else []
+            st.session_state.broll_selected_clips = selected_clips
+        else:
+            legacy_clip = st.session_state.get("broll_selected_clip")
+            if legacy_clip and isinstance(legacy_clip, dict):
+                if not any(c.get("id") == legacy_clip.get("id") for c in selected_clips):
+                    selected_clips = list(selected_clips) + [legacy_clip]
+                    st.session_state.broll_selected_clips = selected_clips
+
+        selected_clip_ids = {c.get("id") for c in selected_clips if isinstance(c, dict) and "id" in c}
+        selected_clip = selected_clips[-1] if selected_clips else None
+        st.session_state.broll_selected_clip = selected_clip
 
         if stock_results is None:
             st.markdown(
@@ -804,13 +834,27 @@ def render_broll_page(temp_dir: Path = None):
                     )
                     st.markdown(overview_html, unsafe_allow_html=True)
 
+                # Selected clips summary indicator
+                if selected_clips:
+                    st.markdown(
+                        f"""
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.28); border-radius: 8px; padding: 8px 14px; margin-bottom: 14px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="color: #34d399; font-size: 0.82rem; font-weight: 600;">✓ {len(selected_clips)} footage clip{'s' if len(selected_clips) != 1 else ''} selected for B-roll</span>
+                            </div>
+                            <span style="font-size: 0.72rem; color: #8b90a7;">Click any selected clip to deselect</span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
                 # 2. Stock Footage Gallery with Individual Timeline Placements
                 grid_col1, grid_col2 = st.columns(2, gap="medium")
                 for idx, clip in enumerate(stock_results):
                     target_col = grid_col1 if (idx % 2 == 0) else grid_col2
                     match = clip_matches[idx]
                     with target_col:
-                        is_sel = bool(selected_clip and selected_clip.get("id") == clip.get("id"))
+                        is_sel = bool(clip.get("id") in selected_clip_ids)
                         sel_class = " selected" if is_sel else ""
                         sel_badge_html = '<span style="background: #10b981; color: #0b0d14; font-size: 0.7rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; margin-left: 6px;">✓ SELECTED</span>' if is_sel else ""
 
@@ -890,8 +934,20 @@ def render_broll_page(temp_dir: Path = None):
                             key=f"broll_select_clip_{clip.get('id')}_{idx}",
                             type=btn_type,
                             use_container_width=True,
+                            help="Click to deselect this clip" if is_sel else "Click to select this clip for B-roll",
                         ):
-                            st.session_state.broll_selected_clip = clip
+                            current_list = list(st.session_state.get("broll_selected_clips") or [])
+                            if is_sel:
+                                new_list = [c for c in current_list if c.get("id") != clip.get("id")]
+                            else:
+                                if not any(c.get("id") == clip.get("id") for c in current_list):
+                                    new_list = current_list + [clip]
+                                else:
+                                    new_list = current_list
+
+                            st.session_state.broll_selected_clips = new_list
+                            st.session_state.broll_selected_clip = new_list[-1] if new_list else None
+                            st.session_state.broll_selected_clips_video_id = current_video_id
                             st.rerun()
 
                         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
@@ -1030,6 +1086,8 @@ def render_broll_page(temp_dir: Path = None):
 
                 if st.button("✕ Change / Remove Selection", key="broll_remove_selected_clip_btn", use_container_width=True):
                     st.session_state.broll_selected_clip = None
+                    st.session_state.broll_selected_clips = []
+                    st.session_state.broll_selected_clips_video_id = None
                     st.session_state.broll_generation_error = None
                     st.rerun()
 
@@ -1162,11 +1220,36 @@ def render_broll_page(temp_dir: Path = None):
                 try:
                     out_filename = generate_safe_filename(f"broll_{Path(current_broll_video).stem}.mp4")
                     output_file_path = temp_dir / out_filename
-                    placements_payload = [{
-                        "clip": selected_clip,
-                        "start": final_start,
-                        "end": final_end,
-                    }]
+                    all_selected = st.session_state.get("broll_selected_clips") or [selected_clip]
+                    placements_payload = []
+                    for c in all_selected:
+                        c_id = c.get("id") or "clip"
+                        c_kw = str(c.get("keyword", "")).strip()
+                        c_dur = float(c.get("duration", 0.0) or 0.0)
+                        m = match_clip_to_transcript(c_kw, transcript)
+                        if m:
+                            s_val = round(float(m["start"]), 2)
+                            e_val = round(float(m["end"]), 2)
+                        else:
+                            s_val = 0.0
+                            e_val = round(min(total_video_duration if total_video_duration > 0 else 5.0, c_dur if c_dur > 0 else 5.0), 2)
+
+                        st_key = f"broll_time_start_{c_id}"
+                        en_key = f"broll_time_end_{c_id}"
+                        s_val = float(st.session_state.get(st_key, s_val))
+                        e_val = float(st.session_state.get(en_key, e_val))
+                        if s_val < e_val:
+                            placements_payload.append({
+                                "clip": c,
+                                "start": s_val,
+                                "end": e_val,
+                            })
+                    if not placements_payload:
+                        placements_payload = [{
+                            "clip": selected_clip,
+                            "start": final_start,
+                            "end": final_end,
+                        }]
 
                     rendered_output = compose_broll_video(
                         original_video_path=Path(current_broll_video),

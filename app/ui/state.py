@@ -68,6 +68,8 @@ def initialize_session_state():
         "broll_stock_video_id": None,
         "broll_stock_error": None,
         "broll_selected_clip": None,
+        "broll_selected_clips": [],
+        "broll_selected_clips_video_id": None,
         "broll_is_generating": False,
         "broll_generation_error": None,
         "broll_generation_success": False,
@@ -132,6 +134,8 @@ def reset_and_clear_all(temp_dir: Path):
     st.session_state.broll_stock_video_id = None
     st.session_state.broll_stock_error = None
     st.session_state.broll_selected_clip = None
+    st.session_state.broll_selected_clips = []
+    st.session_state.broll_selected_clips_video_id = None
     st.session_state.broll_is_generating = False
     st.session_state.broll_generation_error = None
     st.session_state.broll_generation_success = False
