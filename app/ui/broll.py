@@ -10,6 +10,7 @@ from core.transcription import transcribe_video, format_segment_time
 from core.keywords import generate_keywords_from_transcript
 from core.stock import (
     search_stock_footage,
+    search_pixabay_videos,
     match_clip_to_transcript,
     get_segment_color,
     calculate_timeline_percentages,
@@ -107,7 +108,7 @@ def render_broll_page(temp_dir: Path = None):
             """
             <div class="editor-card" style="border: 1px solid #6c5ce7; background: rgba(108, 92, 231, 0.08); padding: 18px 24px; margin-bottom: 20px;">
                 <div style="font-size: 0.95rem; font-weight: 600; color: #ffffff; margin-bottom: 8px;">🎬 How AI B-roll Editing Works</div>
-                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 12px;">
+                <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-top: 12px;">
                     <div>
                         <div style="color: #a78bfa; font-weight: 600; font-size: 0.85rem;">1. Transcription</div>
                         <div style="font-size: 0.78rem; color: #8b90a7; margin-top: 4px;">Audio is transcribed into timestamped segments using Groq Whisper.</div>
@@ -117,12 +118,16 @@ def render_broll_page(temp_dir: Path = None):
                         <div style="font-size: 0.78rem; color: #8b90a7; margin-top: 4px;">Groq LLM extracts context queries for each sentence.</div>
                     </div>
                     <div>
-                        <div style="color: #34d399; font-weight: 600; font-size: 0.85rem;">3. Stock Search</div>
-                        <div style="font-size: 0.78rem; color: #8b90a7; margin-top: 4px;">High-resolution stock video clips are retrieved from Pixabay/Pexels.</div>
+                        <div style="color: #34d399; font-weight: 600; font-size: 0.85rem;">3. Suggested Footage</div>
+                        <div style="font-size: 0.78rem; color: #8b90a7; margin-top: 4px;">Stock video clips are suggested based on AI keywords from Pixabay.</div>
                     </div>
                     <div>
-                        <div style="color: #a78bfa; font-weight: 600; font-size: 0.85rem;">4. B-roll Overlay</div>
-                        <div style="font-size: 0.78rem; color: #8b90a7; margin-top: 4px;">FFmpeg stitches and overlays the B-roll clips onto your video.</div>
+                        <div style="color: #06b6d4; font-weight: 600; font-size: 0.85rem;">4. Manual Search</div>
+                        <div style="font-size: 0.78rem; color: #8b90a7; margin-top: 4px;">Search and pick custom stock clips with your own search terms.</div>
+                    </div>
+                    <div>
+                        <div style="color: #a78bfa; font-weight: 600; font-size: 0.85rem;">5. B-roll Overlay</div>
+                        <div style="font-size: 0.78rem; color: #8b90a7; margin-top: 4px;">FFmpeg stitches and overlays all selected B-roll clips onto your video.</div>
                     </div>
                 </div>
             </div>
@@ -200,6 +205,12 @@ def render_broll_page(temp_dir: Path = None):
         st.session_state.broll_generation_error = None
         st.session_state.broll_generation_success = False
         st.session_state.broll_is_generating = False
+    cached_manual_video_id = st.session_state.get("broll_manual_video_id")
+    if cached_manual_video_id and cached_manual_video_id != current_video_id:
+        st.session_state.broll_manual_results = None
+        st.session_state.broll_manual_video_id = None
+        st.session_state.broll_manual_error = None
+        st.session_state.broll_manual_query = ""
     cached_selection_video_id = st.session_state.get("broll_selected_clips_video_id")
     if cached_selection_video_id and cached_selection_video_id != current_video_id:
         st.session_state.broll_selected_clip = None
@@ -348,6 +359,10 @@ def render_broll_page(temp_dir: Path = None):
                     st.session_state.broll_selected_clip = None
                     st.session_state.broll_selected_clips = []
                     st.session_state.broll_selected_clips_video_id = None
+                    st.session_state.broll_manual_results = None
+                    st.session_state.broll_manual_query = ""
+                    st.session_state.broll_manual_video_id = None
+                    st.session_state.broll_manual_error = None
                     st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)  # Close Input Video Card
@@ -378,12 +393,27 @@ def render_broll_page(temp_dir: Path = None):
         st.markdown("</div>", unsafe_allow_html=True)
 
     # =========================================================================
-    # 5. FOUR WORKFLOW SECTIONS (Single-Column Vertical Layout)
+    # 5. FIVE WORKFLOW SECTIONS (Single-Column Vertical Layout)
     # 1. Video Transcription
     # 2. AI Keyword Generation
-    # 3. Stock Footage Search
-    # 4. B-roll Placement & Timeline
+    # 3. Suggested Stock Footage
+    # 4. Manual Stock Footage Search
+    # 5. B-roll Placement & Timeline
     # =========================================================================
+
+    # Calculate video duration once for timeline components across all workflow cards
+    transcript = st.session_state.get("broll_transcript")
+    total_video_duration = 0.0
+    if current_broll_video and Path(current_broll_video).exists():
+        try:
+            meta = get_video_metadata(Path(current_broll_video))
+            total_video_duration = float(meta.get("duration", 0.0) or 0.0)
+        except Exception:
+            pass
+    if total_video_duration <= 0.0 and transcript:
+        ends = [float(s.get("end", 0.0)) for s in transcript if isinstance(s, dict) and "end" in s]
+        if ends:
+            total_video_duration = max(ends)
 
     # -------------------------------------------------------------------------
     # STEP 1: Video Transcription
@@ -646,7 +676,7 @@ def render_broll_page(temp_dir: Path = None):
                 st.markdown(keywords_html, unsafe_allow_html=True)
 
     # -------------------------------------------------------------------------
-    # STEP 3: Stock Footage Search
+    # STEP 3: Suggested Stock Footage
     # -------------------------------------------------------------------------
     with st.container(key="broll_stock_search_card", border=True):
         c3_head_col1, c3_head_col2 = st.columns([0.78, 0.22])
@@ -655,7 +685,7 @@ def render_broll_page(temp_dir: Path = None):
                 """
                 <div class="card-title-group" style="display: flex; align-items: center; min-height: 38px;">
                     <div class="card-step-badge">3</div>
-                    <div class="card-title-text">Stock Footage Search</div>
+                    <div class="card-title-text">Suggested Stock Footage</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -671,7 +701,7 @@ def render_broll_page(temp_dir: Path = None):
         st.markdown(
             """
             <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
-                Search free video repositories and select high-resolution B-roll clips.
+                Display stock footage suggestions based on AI-generated keywords.
             </p>
             """,
             unsafe_allow_html=True,
@@ -689,6 +719,8 @@ def render_broll_page(temp_dir: Path = None):
                 with st.spinner("Searching Pixabay for stock footage... Please wait."):
                     try:
                         results = search_stock_footage(keywords)
+                        for c in results:
+                            c["source_type"] = "suggested"
                         st.session_state.broll_stock_results = results
                         st.session_state.broll_stock_video_id = current_video_id
                         st.session_state.broll_stock_error = None
@@ -771,17 +803,17 @@ def render_broll_page(temp_dir: Path = None):
                     unsafe_allow_html=True,
                 )
             else:
-                total_video_duration = 0.0
-                if current_broll_video and Path(current_broll_video).exists():
-                    try:
-                        meta = get_video_metadata(Path(current_broll_video))
-                        total_video_duration = float(meta.get("duration", 0.0) or 0.0)
-                    except Exception:
-                        pass
-                if total_video_duration <= 0.0 and transcript:
-                    ends = [float(s.get("end", 0.0)) for s in transcript if isinstance(s, dict) and "end" in s]
-                    if ends:
-                        total_video_duration = max(ends)
+                if total_video_duration <= 0.0:
+                    if current_broll_video and Path(current_broll_video).exists():
+                        try:
+                            meta = get_video_metadata(Path(current_broll_video))
+                            total_video_duration = float(meta.get("duration", 0.0) or 0.0)
+                        except Exception:
+                            pass
+                    if total_video_duration <= 0.0 and transcript:
+                        ends = [float(s.get("end", 0.0)) for s in transcript if isinstance(s, dict) and "end" in s]
+                        if ends:
+                            total_video_duration = max(ends)
 
                 # Pre-calculate matching transcript segment for each clip
                 clip_matches = [
@@ -911,13 +943,20 @@ def render_broll_page(temp_dir: Path = None):
                                 f'</div>'
                             )
 
+                        creator_info = html.escape(str(clip.get("user") or "Pixabay"))
+                        suggested_badge_html = '<span style="background: rgba(139, 92, 246, 0.18); border: 1px solid #8b5cf6; color: #c4b5fd; font-size: 0.68rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">AI SUGGESTED</span>'
+
                         card_header_html = (
                             f'<div class="stock-card{sel_class}">'
                             f'{thumb_html}'
                             f'<div class="stock-meta-row">'
+                            f'<div style="display: flex; align-items: center; flex-wrap: wrap; gap: 4px;">'
                             f'<span style="font-size: 0.76rem; font-weight: 600; color: #a78bfa;">🔍 #{idx + 1} {safe_kw}</span>'
+                            f'{suggested_badge_html}'
+                            f'</div>'
                             f'{sel_badge_html}'
                             f'</div>'
+                            f'<div style="font-size: 0.70rem; color: #6b7280; margin-bottom: 4px;">👤 Creator: {creator_info} • Pixabay Video #{clip.get("id")}</div>'
                             f'<div class="stock-tags-text" title="{safe_tags}">{safe_tags}</div>'
                             f'{timeline_box_html}'
                             f'</div>'
@@ -942,7 +981,9 @@ def render_broll_page(temp_dir: Path = None):
                                 new_list = [c for c in current_list if c.get("id") != clip.get("id")]
                             else:
                                 if not any(c.get("id") == clip.get("id") for c in current_list):
-                                    new_list = current_list + [clip]
+                                    clip_copy = dict(clip)
+                                    clip_copy["source_type"] = "suggested"
+                                    new_list = current_list + [clip_copy]
                                 else:
                                     new_list = current_list
 
@@ -956,7 +997,254 @@ def render_broll_page(temp_dir: Path = None):
                 st.markdown("<div style='padding-bottom: 8px;'></div>", unsafe_allow_html=True)
 
     # -------------------------------------------------------------------------
-    # CARD 4: B-roll Placement & Timeline
+    # STEP 4: Manual Stock Footage Search
+    # -------------------------------------------------------------------------
+    with st.container(key="broll_manual_search_card", border=True):
+        c4_head_col1, c4_head_col2 = st.columns([0.78, 0.22])
+        with c4_head_col1:
+            st.markdown(
+                """
+                <div class="card-title-group" style="display: flex; align-items: center; min-height: 38px;">
+                    <div class="card-step-badge">4</div>
+                    <div class="card-title-text">Manual Stock Footage Search</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with c4_head_col2:
+            st.markdown("<div style='min-height: 38px;'></div>", unsafe_allow_html=True)
+
+        st.markdown(
+            """
+            <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
+                Allow users to manually search for and select stock footage independently of AI-generated keywords.
+            </p>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        m_search_col1, m_search_col2 = st.columns([0.78, 0.22], gap="small")
+        with m_search_col1:
+            manual_search_input = st.text_input(
+                "Search stock footage query",
+                value=st.session_state.get("broll_manual_query", ""),
+                placeholder="Enter custom keywords (e.g. coffee shop, nature drone, tech workspace)...",
+                label_visibility="collapsed",
+                key="broll_manual_search_input",
+            )
+        with m_search_col2:
+            manual_search_clicked = st.button(
+                "Search Footage",
+                key="broll_manual_search_btn",
+                type="primary",
+                use_container_width=True,
+            )
+
+        if manual_search_clicked:
+            clean_m_q = str(manual_search_input or "").strip()
+            if not clean_m_q:
+                st.session_state.broll_manual_error = "Please enter search keywords before searching for stock footage."
+                st.session_state.broll_manual_results = None
+                st.rerun()
+            else:
+                with st.spinner(f"Searching Pixabay for '{clean_m_q}'... Please wait."):
+                    try:
+                        m_results = search_pixabay_videos(query=clean_m_q, per_page=12)
+                        for c in m_results:
+                            c["source_type"] = "manual"
+                            c["keyword"] = clean_m_q
+                        st.session_state.broll_manual_results = m_results
+                        st.session_state.broll_manual_query = clean_m_q
+                        st.session_state.broll_manual_video_id = current_video_id
+                        st.session_state.broll_manual_error = None
+                        st.rerun()
+                    except Exception as e:
+                        st.session_state.broll_manual_error = str(e)
+                        st.rerun()
+
+        manual_err_msg = st.session_state.get("broll_manual_error")
+        if manual_err_msg:
+            st.markdown(
+                f"""
+                <div class="status-banner-card error" style="margin-top: 4px; margin-bottom: 12px;">
+                    <div class="status-banner-icon error">✕</div>
+                    <div>
+                        <div class="status-banner-title">Manual stock footage search failed</div>
+                        <div class="status-banner-desc">{html.escape(manual_err_msg)}</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        manual_results = st.session_state.get("broll_manual_results")
+
+        if manual_results is None:
+            st.markdown(
+                """
+                <div style="padding-bottom: 16px;">
+                    <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 26px 20px; text-align: center;">
+                        <div style="font-size: 28px; margin-bottom: 8px;">🔍</div>
+                        <div style="font-size: 0.88rem; font-weight: 500; color: #d1d5db;">Manual Stock Search Ready</div>
+                        <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Enter any topic or action above to find custom stock video cutaways.</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            q_disp = html.escape(st.session_state.get("broll_manual_query", ""))
+            st.markdown(
+                f"""
+                <div class="status-banner-card" style="margin-top: 4px; margin-bottom: 12px; padding: 10px 14px;">
+                    <div class="status-banner-icon" style="width: 26px; height: 26px; font-size: 14px; background: rgba(6, 182, 212, 0.15); color: #06b6d4;">✓</div>
+                    <div>
+                        <div class="status-banner-title" style="font-size: 0.84rem;">Manual search completed.</div>
+                        <div class="status-banner-desc" style="font-size: 0.73rem;">Found {len(manual_results)} video clip{'s' if len(manual_results) != 1 else ''} for "{q_disp}" from Pixabay.</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            if len(manual_results) == 0:
+                st.markdown(
+                    f"""
+                    <div style="padding-bottom: 16px;">
+                        <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 20px; text-align: center; margin-top: 10px;">
+                            <div style="font-size: 0.85rem; color: #9ca3af;">No matching stock footage found for "{q_disp}".</div>
+                            <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Try searching with different or more general keywords.</div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                m_matches = [
+                    match_clip_to_transcript(c.get("keyword", ""), transcript)
+                    for c in manual_results
+                ]
+
+                # Current selected clips
+                cur_selected = st.session_state.get("broll_selected_clips") or []
+                selected_clip_ids = {c.get("id") for c in cur_selected if isinstance(c, dict) and "id" in c}
+
+                # Gallery
+                m_grid_col1, m_grid_col2 = st.columns(2, gap="medium")
+                for m_idx, m_clip in enumerate(manual_results):
+                    m_target_col = m_grid_col1 if (m_idx % 2 == 0) else m_grid_col2
+                    m_match = m_matches[m_idx]
+                    with m_target_col:
+                        is_sel = bool(m_clip.get("id") in selected_clip_ids)
+                        sel_class = " selected" if is_sel else ""
+                        sel_badge_html = '<span style="background: #10b981; color: #0b0d14; font-size: 0.7rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; margin-left: 6px;">✓ SELECTED</span>' if is_sel else ""
+
+                        thumb_html = ""
+                        if m_clip.get("thumbnail_url"):
+                            safe_thumb = html.escape(m_clip["thumbnail_url"])
+                            thumb_html = (
+                                f'<div class="stock-card-thumb-wrap">'
+                                f'<img src="{safe_thumb}" alt="Clip thumbnail" loading="lazy" />'
+                                f'<span class="stock-badge-res">{html.escape(m_clip.get("resolution", "HD"))}</span>'
+                                f'<span class="stock-badge-duration">{html.escape(m_clip.get("duration_formatted", "00:00"))}</span>'
+                                f'</div>'
+                            )
+
+                        safe_tags = html.escape(str(m_clip.get("tags", "")).strip())
+                        safe_kw = html.escape(str(m_clip.get("keyword", "")).strip())
+                        creator_info = html.escape(str(m_clip.get("user") or "Pixabay"))
+
+                        if m_match and total_video_duration > 0.0:
+                            l_pct, w_pct = calculate_timeline_percentages(
+                                m_match["start"], m_match["end"], total_video_duration
+                            )
+                            color = get_segment_color(m_match["segment_index"])
+                            p_range = f"{format_duration(m_match['start'])} - {format_duration(m_match['end'])}"
+                            dur_label = f"{round(m_match['duration'], 1)}s"
+                            snippet = html.escape(
+                                m_match["text"][:75] + ("..." if len(m_match["text"]) > 75 else "")
+                            )
+                            timeline_box_html = (
+                                f'<div style="background: #0d0f17; border: 1px solid #1a1d2e; border-radius: 8px; padding: 9px 12px; margin-top: 8px; margin-bottom: 10px;">'
+                                f'<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">'
+                                f'<span style="font-size: 0.73rem; font-weight: 600; color: {color["light"]};">⏱️ Suggested Placement</span>'
+                                f'<span style="font-size: 0.72rem; font-weight: 700; color: #ffffff; font-family: monospace; background: {color["bg"]}; border: 1px solid {color["border"]}; padding: 2px 7px; border-radius: 4px;">{p_range} ({dur_label})</span>'
+                                f'</div>'
+                                f'<div style="position: relative; width: 100%; height: 8px; background: #161825; border: 1px solid #23273c; border-radius: 4px; overflow: hidden; margin-bottom: 4px;">'
+                                f'<div style="position: absolute; left: {l_pct}%; width: {w_pct}%; height: 100%; background: {color["primary"]}; border-radius: 2px;"></div>'
+                                f'</div>'
+                                f'<div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: #6b7280; font-family: monospace; margin-bottom: 6px;">'
+                                f'<span>00:00</span>'
+                                f'<span>{format_duration(total_video_duration)}</span>'
+                                f'</div>'
+                                f'<div style="font-size: 0.71rem; color: #9ca3af; font-style: italic; line-height: 1.3;" title="{html.escape(m_match["text"])}">'
+                                f'"{snippet}"'
+                                f'</div>'
+                                f'</div>'
+                            )
+                        else:
+                            timeline_box_html = (
+                                f'<div style="background: #0d0f17; border: 1px dashed #23273c; border-radius: 8px; padding: 9px 12px; margin-top: 8px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">'
+                                f'<span style="font-size: 0.75rem; color: #06b6d4;">⏱️</span>'
+                                f'<span style="font-size: 0.72rem; color: #8b90a7;">Manual Placement: Customize timeline position in Step 5</span>'
+                                f'</div>'
+                            )
+
+                        manual_badge = '<span style="background: rgba(6, 182, 212, 0.18); border: 1px solid #06b6d4; color: #67e8f9; font-size: 0.68rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">MANUAL</span>'
+
+                        card_header_html = (
+                            f'<div class="stock-card{sel_class}">'
+                            f'{thumb_html}'
+                            f'<div class="stock-meta-row">'
+                            f'<div style="display: flex; align-items: center; flex-wrap: wrap; gap: 4px;">'
+                            f'<span style="font-size: 0.76rem; font-weight: 600; color: #67e8f9;">🔍 #{m_idx + 1} {safe_kw}</span>'
+                            f'{manual_badge}'
+                            f'</div>'
+                            f'{sel_badge_html}'
+                            f'</div>'
+                            f'<div style="font-size: 0.70rem; color: #6b7280; margin-bottom: 4px;">👤 Creator: {creator_info} • Pixabay Video #{m_clip.get("id")}</div>'
+                            f'<div class="stock-tags-text" title="{safe_tags}">{safe_tags}</div>'
+                            f'{timeline_box_html}'
+                            f'</div>'
+                        )
+                        st.markdown(card_header_html, unsafe_allow_html=True)
+
+                        if m_clip.get("preview_url"):
+                            with st.expander(f"▶ Preview Clip #{m_clip.get('id')}", expanded=False):
+                                st.video(m_clip["preview_url"])
+
+                        btn_label = "✓ Selected for B-roll" if is_sel else "Select Clip"
+                        btn_type = "primary" if is_sel else "secondary"
+                        if st.button(
+                            btn_label,
+                            key=f"broll_select_manual_clip_{m_clip.get('id')}_{m_idx}",
+                            type=btn_type,
+                            use_container_width=True,
+                            help="Click to deselect this clip" if is_sel else "Click to select this clip for B-roll",
+                        ):
+                            current_list = list(st.session_state.get("broll_selected_clips") or [])
+                            if is_sel:
+                                new_list = [c for c in current_list if c.get("id") != m_clip.get("id")]
+                            else:
+                                if not any(c.get("id") == m_clip.get("id") for c in current_list):
+                                    clip_to_add = dict(m_clip)
+                                    clip_to_add["source_type"] = "manual"
+                                    new_list = current_list + [clip_to_add]
+                                else:
+                                    new_list = current_list
+
+                            st.session_state.broll_selected_clips = new_list
+                            st.session_state.broll_selected_clip = new_list[-1] if new_list else None
+                            st.session_state.broll_selected_clips_video_id = current_video_id
+                            st.rerun()
+
+                        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+
+                st.markdown("<div style='padding-bottom: 8px;'></div>", unsafe_allow_html=True)
+
+    # -------------------------------------------------------------------------
+    # STEP 5: B-roll Placement & Timeline
+    # Planned: FFmpeg Overlay
     # -------------------------------------------------------------------------
     with st.container(key="broll_placement_card", border=True):
         all_selected = st.session_state.get("broll_selected_clips")
@@ -964,18 +1252,18 @@ def render_broll_page(temp_dir: Path = None):
             legacy_clip = st.session_state.get("broll_selected_clip")
             all_selected = [legacy_clip] if (legacy_clip and isinstance(legacy_clip, dict)) else []
 
-        c4_head_col1, c4_head_col2 = st.columns([0.76, 0.24])
-        with c4_head_col1:
+        c5_head_col1, c5_head_col2 = st.columns([0.76, 0.24])
+        with c5_head_col1:
             st.markdown(
                 """
                 <div class="card-title-group" style="display: flex; align-items: center; min-height: 38px;">
-                    <div class="card-step-badge">4</div>
+                    <div class="card-step-badge">5</div>
                     <div class="card-title-text">B-roll Placement & Timeline</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-        with c4_head_col2:
+        with c5_head_col2:
             generate_video_clicked = st.button(
                 "Generate Video",
                 key="broll_generate_video_btn",
@@ -1019,7 +1307,7 @@ def render_broll_page(temp_dir: Path = None):
                 <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 26px 20px; text-align: center; margin-top: 6px; margin-bottom: 10px;">
                     <div style="font-size: 28px; margin-bottom: 8px;">⏱️</div>
                     <div style="font-size: 0.88rem; font-weight: 500; color: #d1d5db;">No Stock Footage Selected</div>
-                    <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Click <b>Select Clip</b> on any footage in Step 3 (Stock Footage Search) to review and configure its B-roll timeline placement.</div>
+                    <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Click <b>Select Clip</b> in Step 3 (Suggested Stock Footage) or Step 4 (Manual Stock Footage Search) to review and configure its B-roll timeline placement.</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -1086,6 +1374,8 @@ def render_broll_page(temp_dir: Path = None):
                         l_pct, w_pct = calculate_timeline_percentages(s_val, e_val, total_video_duration)
                         col_scheme = get_segment_color(p.get("segment_index", p_idx))
                         p_dur = max(0.0, e_val - s_val)
+                        is_manual = (c.get("source_type") == "manual")
+                        type_tag = "[MANUAL]" if is_manual else "[SUGGESTED]"
                         timeline_blocks.append(
                             f'<div style="position: absolute; left: {l_pct}%; width: {w_pct}%; height: 100%; '
                             f'background: {col_scheme["primary"]}; opacity: 0.90; display: flex; align-items: center; '
@@ -1095,16 +1385,26 @@ def render_broll_page(temp_dir: Path = None):
                         legend_items.append(
                             f'<span style="background: {col_scheme["bg"]}; border: 1px solid {col_scheme["border"]}; color: {col_scheme["light"]}; '
                             f'padding: 2px 7px; border-radius: 4px; font-size: 0.68rem; font-family: monospace; font-weight: 600;">'
-                            f'Clip #{c_id}: {format_duration(s_val)} - {format_duration(e_val)} ({p_dur:.1f}s)</span>'
+                            f'{type_tag} Clip #{c_id}: {format_duration(s_val)} - {format_duration(e_val)} ({p_dur:.1f}s)</span>'
                         )
                     blocks_html = "".join(timeline_blocks)
                     legend_html = "".join(legend_items)
                     total_str = format_duration(total_video_duration)
+
+                    suggested_count = sum(1 for c in all_selected if c.get("source_type") != "manual")
+                    manual_count = sum(1 for c in all_selected if c.get("source_type") == "manual")
+                    if manual_count > 0 and suggested_count > 0:
+                        status_detail = f"✓ {len(all_selected)} Clips Scheduled ({suggested_count} Suggested, {manual_count} Manual)"
+                    elif manual_count > 0:
+                        status_detail = f"✓ {len(all_selected)} Clips Scheduled ({manual_count} Manual)"
+                    else:
+                        status_detail = f"✓ {len(all_selected)} Clips Scheduled"
+
                     timeline_preview_html = (
                         f'<div style="background: #0d0f17; border: 1px solid #1f2336; border-radius: 10px; padding: 12px 14px; margin-top: 10px; margin-bottom: 12px;">'
                         f'<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">'
                         f'<span style="font-size: 0.78rem; font-weight: 600; color: #ffffff;">Proposed Timeline Placement</span>'
-                        f'<span style="font-size: 0.72rem; color: #34d399; font-family: monospace; font-weight: 600;">✓ {len(all_selected)} Clips Scheduled</span>'
+                        f'<span style="font-size: 0.72rem; color: #34d399; font-family: monospace; font-weight: 600;">{status_detail}</span>'
                         f'</div>'
                         f'<div style="position: relative; width: 100%; height: 20px; background: #161825; border: 1px solid #252a3f; border-radius: 6px; overflow: hidden; margin-bottom: 6px;">'
                         f'{blocks_html}'
@@ -1169,14 +1469,27 @@ def render_broll_page(temp_dir: Path = None):
                         )
                     safe_kw = html.escape(clip_kw)
                     safe_tags = html.escape(str(clip_tags))
+
+                    is_manual = (c.get("source_type") == "manual")
+                    source_badge = (
+                        '<span style="background: rgba(6, 182, 212, 0.18); border: 1px solid #06b6d4; color: #67e8f9; font-size: 0.68rem; font-weight: 700; padding: 2px 6px; border-radius: 4px;">MANUAL</span>'
+                        if is_manual
+                        else '<span style="background: rgba(139, 92, 246, 0.18); border: 1px solid #8b5cf6; color: #c4b5fd; font-size: 0.68rem; font-weight: 700; padding: 2px 6px; border-radius: 4px;">AI SUGGESTED</span>'
+                    )
+                    creator_info = html.escape(str(c.get("user") or "Pixabay"))
+
                     st.markdown(
                         f"""
                         <div style="background: #0d0f17; border: 1px solid #1f2336; border-radius: 10px; padding: 12px 14px;">
                             {thumb_markup}
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                <span style="font-size: 0.82rem; font-weight: 600; color: #a78bfa;">🔍 {safe_kw}</span>
+                                <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+                                    <span style="font-size: 0.82rem; font-weight: 600; color: #a78bfa;">🔍 {safe_kw}</span>
+                                    {source_badge}
+                                </div>
                                 <span style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #34d399; font-size: 0.68rem; font-weight: 700; padding: 2px 6px; border-radius: 4px;">SELECTED</span>
                             </div>
+                            <div style="font-size: 0.70rem; color: #6b7280; margin-bottom: 2px;">👤 Creator: {creator_info} • Pixabay Video #{clip_id}</div>
                             <div style="font-size: 0.72rem; color: #8b90a7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{safe_tags}">{safe_tags}</div>
                         </div>
                         """,
@@ -1197,8 +1510,17 @@ def render_broll_page(temp_dir: Path = None):
                         st.rerun()
 
                 with rev_col2:
-                    seg_badge = f"Segment #{seg_idx + 1}" if match else "Custom Placement"
-                    safe_seg_text = html.escape(seg_text)
+                    safe_seg_text = html.escape(str(seg_text))
+                    if match:
+                        seg_badge = f"Segment #{seg_idx + 1}"
+                        context_body = f'"{safe_seg_text}"'
+                    elif is_manual:
+                        seg_badge = "Manual Placement"
+                        context_body = "Custom stock footage selected via manual search. Position clip along the timeline using timestamps below."
+                    else:
+                        seg_badge = "Custom Placement"
+                        context_body = "Suggested footage with custom timeline positioning. Adjust timestamps below."
+
                     st.markdown(
                         f"""
                         <div style="background: #0d0f17; border: 1px solid #1f2336; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px;">
@@ -1207,7 +1529,7 @@ def render_broll_page(temp_dir: Path = None):
                                 <span style="background: {col_scheme['bg']}; border: 1px solid {col_scheme['border']}; color: {col_scheme['light']}; font-size: 0.68rem; padding: 2px 7px; border-radius: 4px; font-weight: 600;">{seg_badge}</span>
                             </div>
                             <div style="font-size: 0.77rem; color: #d1d5db; font-style: italic; line-height: 1.35; background: #12141e; border: 1px solid #1e2235; border-radius: 6px; padding: 8px 10px;">
-                                "{safe_seg_text}"
+                                {context_body}
                             </div>
                         </div>
                         """,
