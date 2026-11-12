@@ -1,3 +1,4 @@
+import copy
 import json
 from pathlib import Path
 import re
@@ -136,6 +137,72 @@ def download_stock_clip(
         ) from e
 
 
+def resolve_placement_overlaps(
+    placements: List[Dict[str, Any]],
+    total_duration: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Ensure every placement has a visible, non-zero duration and does not get completely occluded.
+    If multiple placements share identical start times or overlap completely, partition the span
+    evenly among them so that EVERY clip is visible sequentially in the final video.
+    """
+    if not placements or len(placements) <= 1:
+        return placements
+
+    resolved = copy.deepcopy(placements)
+    resolved.sort(key=lambda x: (float(x.get("start", 0.0)), float(x.get("end", 0.0))))
+
+    # Pass 1: Cluster placements with identical/near-identical start times (< 0.05s)
+    i = 0
+    n = len(resolved)
+    while i < n:
+        c_start = float(resolved[i].get("start", 0.0))
+        c_end = float(resolved[i].get("end", 0.0))
+        j = i + 1
+        while j < n and abs(float(resolved[j].get("start", 0.0)) - c_start) < 0.05:
+            c_end = max(c_end, float(resolved[j].get("end", 0.0)))
+            j += 1
+
+        cluster_size = j - i
+        if cluster_size > 1:
+            span_dur = max(0.1 * cluster_size, c_end - c_start)
+            step = span_dur / cluster_size
+            for k_idx in range(cluster_size):
+                s_k = round(c_start + (k_idx * step), 2)
+                e_k = round(c_start + ((k_idx + 1) * step), 2)
+                if e_k <= s_k:
+                    e_k = round(s_k + 0.1, 2)
+                resolved[i + k_idx]["start"] = s_k
+                resolved[i + k_idx]["end"] = e_k
+            i = j
+        else:
+            i += 1
+
+    # Pass 2: Resolve overlapping spans so no clip is occluded
+    for i in range(len(resolved) - 1):
+        curr_e = float(resolved[i]["end"])
+        nxt_s = float(resolved[i + 1]["start"])
+        nxt_e = float(resolved[i + 1]["end"])
+        if nxt_s < curr_e:
+            if nxt_e > curr_e:
+                resolved[i + 1]["start"] = round(curr_e, 2)
+            else:
+                curr_s = float(resolved[i]["start"])
+                span = curr_e - curr_s
+                mid = round(curr_s + (span / 2.0), 2)
+                resolved[i]["end"] = mid
+                resolved[i + 1]["start"] = mid
+                resolved[i + 1]["end"] = round(curr_e, 2)
+
+    # Pass 3: Clamp to total_duration if provided
+    if total_duration and total_duration > 0:
+        for p in resolved:
+            p["start"] = max(0.0, min(float(p["start"]), total_duration))
+            p["end"] = max(round(float(p["start"]) + 0.1, 2), min(float(p["end"]), total_duration))
+
+    return resolved
+
+
 def compose_broll_video(
     original_video_path: Path | str,
     broll_placements: List[Dict[str, Any]],
@@ -207,24 +274,28 @@ def compose_broll_video(
         if not clip_data or not isinstance(clip_data, dict):
             raise ValueError(f"Placement #{idx + 1} is missing valid stock clip data.")
 
-        start_time = float(p.get("start", 0.0))
-        end_time = float(p.get("end", 0.0))
+        raw_start = float(p.get("start", 0.0))
+        raw_end = float(p.get("end", 0.0))
 
-        start_time = max(0.0, start_time)
-        if orig_dur > 0:
-            start_time = min(start_time, orig_dur)
-            end_time = min(end_time, orig_dur)
-
-        if start_time >= end_time:
+        if raw_start >= raw_end:
             raise ValueError(
-                f"Invalid B-roll placement #{idx + 1}: start timestamp ({start_time:.2f}s) "
-                f"must be strictly before end timestamp ({end_time:.2f}s)."
+                f"Invalid B-roll placement #{idx + 1}: start timestamp ({raw_start:.2f}s) "
+                f"must be strictly before end timestamp ({raw_end:.2f}s)."
             )
 
-        if (end_time - start_time) < 0.1:
+        if (raw_end - raw_start) < 0.1:
             raise ValueError(
                 f"B-roll placement #{idx + 1} duration is too short (minimum 0.1s required)."
             )
+
+        start_time = max(0.0, raw_start)
+        end_time = max(start_time + 0.1, raw_end)
+        if orig_dur > 0:
+            if start_time >= orig_dur:
+                start_time = max(0.0, orig_dur - 0.2)
+            end_time = min(end_time, orig_dur)
+            if start_time >= end_time:
+                start_time = max(0.0, round(end_time - 0.1, 2))
 
         if progress_callback:
             dl_progress = 0.10 + (0.25 * ((idx + 1) / total_clips))
@@ -242,7 +313,8 @@ def compose_broll_video(
     if not prepared_placements:
         raise ValueError("No valid B-roll clip placements could be prepared.")
 
-    # Sort placements chronologically by start timestamp
+    # De-collide & partition any overlapping placement intervals so no clip is occluded
+    prepared_placements = resolve_placement_overlaps(prepared_placements, total_duration=orig_dur)
     prepared_placements.sort(key=lambda x: x["start"])
 
     if progress_callback:

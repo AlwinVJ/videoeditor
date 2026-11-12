@@ -141,6 +141,204 @@ def format_duration(seconds: float | int) -> str:
     return f"{m:02d}:{s:02d}"
 
 
+def calculate_clip_placements(
+    clips: List[Dict[str, Any]],
+    transcript: Optional[List[Dict[str, Any]]] = None,
+    total_duration: float = 0.0,
+) -> List[Dict[str, Any]]:
+    """
+    Compute non-overlapping, chronologically ordered timeline intervals for multiple selected B-roll clips.
+
+    Guarantees:
+    - Every clip receives a distinct, non-zero visible time slice [start, end].
+    - Clips matching the same transcript segment share that segment via non-overlapping sub-intervals.
+    - Unmatched clips are assigned non-overlapping time slots across the video timeline.
+    - No clip unintentionally occludes or overwrites another clip.
+
+    Args:
+        clips: List of standardized stock clip dictionaries.
+        transcript: Optional list of timestamped transcript segment dictionaries.
+        total_duration: Total duration of original video in seconds.
+
+    Returns:
+        List of placement dicts, each with 'clip', 'start', 'end', 'duration', 'segment_index', 'text', 'match'.
+    """
+    if not clips or not isinstance(clips, list):
+        return []
+
+    num_clips = len(clips)
+    max_dur = float(total_duration) if total_duration and total_duration > 0 else 0.0
+
+    # 1. Match each clip to transcript
+    matches = []
+    for c in clips:
+        kw = str(c.get("keyword", "")).strip() if isinstance(c, dict) else ""
+        m = match_clip_to_transcript(kw, transcript)
+        matches.append(m)
+
+    # 2. Fast-path: single clip
+    if num_clips == 1:
+        c = clips[0]
+        m = matches[0]
+        c_dur = float(c.get("duration", 0.0) or 0.0) if isinstance(c, dict) else 0.0
+        if m:
+            s_val = round(float(m["start"]), 2)
+            e_val = round(float(m["end"]), 2)
+            seg_idx = m["segment_index"]
+            seg_text = m.get("text", "")
+        else:
+            s_val = 0.0
+            fallback_len = c_dur if c_dur > 0 else 5.0
+            e_val = round(min(max_dur if max_dur > 0 else 5.0, fallback_len), 2)
+            if e_val <= s_val:
+                e_val = round(s_val + max(0.5, fallback_len), 2)
+            seg_idx = 0
+            seg_text = "No direct transcript segment match"
+
+        return [{
+            "clip": c,
+            "start": s_val,
+            "end": e_val,
+            "duration": round(max(0.1, e_val - s_val), 2),
+            "segment_index": seg_idx,
+            "text": seg_text,
+            "match": m,
+        }]
+
+    # 3. Multiple clips: Group clips by segment_index (or None for unmatched)
+    from collections import defaultdict
+    seg_groups = defaultdict(list)
+    unmatched = []
+
+    for idx, (c, m) in enumerate(zip(clips, matches)):
+        if m and "segment_index" in m:
+            seg_groups[m["segment_index"]].append((idx, c, m))
+        else:
+            unmatched.append((idx, c))
+
+    placements_by_orig_idx = {}
+
+    # 4. Partition matched segments among clips matching the same segment
+    for seg_idx, group in seg_groups.items():
+        first_m = group[0][2]
+        s_base = float(first_m["start"])
+        e_base = float(first_m["end"])
+        if max_dur > 0:
+            s_base = min(s_base, max_dur)
+            e_base = min(e_base, max_dur)
+        seg_dur = max(0.2, e_base - s_base)
+        group_size = len(group)
+        step = seg_dur / group_size
+
+        for j, (orig_idx, c, m) in enumerate(group):
+            s_j = round(s_base + (j * step), 2)
+            e_j = round(s_base + ((j + 1) * step), 2)
+            if e_j <= s_j:
+                e_j = round(s_j + 0.1, 2)
+            placements_by_orig_idx[orig_idx] = {
+                "clip": c,
+                "start": s_j,
+                "end": e_j,
+                "duration": round(e_j - s_j, 2),
+                "segment_index": seg_idx,
+                "text": m.get("text", ""),
+                "match": m,
+            }
+
+    # 5. Place unmatched clips into available timeline windows
+    if unmatched:
+        occupied = sorted([(p["start"], p["end"]) for p in placements_by_orig_idx.values()], key=lambda x: x[0])
+        timeline_limit = max_dur if max_dur > 0 else max(5.0, num_clips * 4.0)
+        gaps = []
+        curr = 0.0
+        for s_occ, e_occ in occupied:
+            if s_occ > curr + 0.2:
+                gaps.append((curr, s_occ))
+            curr = max(curr, e_occ)
+        if curr + 0.2 < timeline_limit:
+            gaps.append((curr, timeline_limit))
+
+        total_gap_dur = sum(g[1] - g[0] for g in gaps)
+        if gaps and total_gap_dur >= len(unmatched) * 0.2:
+            unm_idx = 0
+            for g_start, g_end in gaps:
+                g_len = g_end - g_start
+                gap_share = max(1, int(round((g_len / total_gap_dur) * len(unmatched))))
+                clips_for_gap = unmatched[unm_idx:unm_idx + gap_share]
+                unm_idx += len(clips_for_gap)
+                if clips_for_gap:
+                    step = g_len / len(clips_for_gap)
+                    for k, (orig_idx, c) in enumerate(clips_for_gap):
+                        s_k = round(g_start + (k * step), 2)
+                        e_k = round(g_start + ((k + 1) * step), 2)
+                        if e_k <= s_k:
+                            e_k = round(s_k + 0.1, 2)
+                        placements_by_orig_idx[orig_idx] = {
+                            "clip": c,
+                            "start": s_k,
+                            "end": e_k,
+                            "duration": round(e_k - s_k, 2),
+                            "segment_index": 0,
+                            "text": "Custom timeline placement",
+                            "match": None,
+                        }
+                if unm_idx >= len(unmatched):
+                    break
+
+        still_unplaced = [item for item in unmatched if item[0] not in placements_by_orig_idx]
+        if still_unplaced:
+            if not placements_by_orig_idx:
+                step = timeline_limit / len(still_unplaced)
+                for k, (orig_idx, c) in enumerate(still_unplaced):
+                    s_k = round(k * step, 2)
+                    e_k = round((k + 1) * step, 2)
+                    if e_k <= s_k:
+                        e_k = round(s_k + 0.1, 2)
+                    placements_by_orig_idx[orig_idx] = {
+                        "clip": c,
+                        "start": s_k,
+                        "end": e_k,
+                        "duration": round(e_k - s_k, 2),
+                        "segment_index": 0,
+                        "text": "Custom timeline placement",
+                        "match": None,
+                    }
+            else:
+                last_end = max((p["end"] for p in placements_by_orig_idx.values()), default=0.0)
+                step = 3.0
+                for k, (orig_idx, c) in enumerate(still_unplaced):
+                    s_k = round(last_end + (k * step), 2)
+                    e_k = round(last_end + ((k + 1) * step), 2)
+                    placements_by_orig_idx[orig_idx] = {
+                        "clip": c,
+                        "start": s_k,
+                        "end": e_k,
+                        "duration": round(e_k - s_k, 2),
+                        "segment_index": 0,
+                        "text": "Custom timeline placement",
+                        "match": None,
+                    }
+
+    # Final pass: check if any placements exceed or touch max_dur
+    if max_dur > 0 and len(placements_by_orig_idx) > 1:
+        items = sorted(placements_by_orig_idx.items(), key=lambda x: (x[1]["start"], x[1]["end"]))
+        needs_fit = any(p["start"] >= max_dur - 0.05 or p["end"] > max_dur + 0.05 for _, p in items)
+        if needs_fit:
+            step = max_dur / len(items)
+            for k, (orig_idx, p) in enumerate(items):
+                s_k = round(k * step, 2)
+                e_k = round((k + 1) * step, 2)
+                if e_k <= s_k:
+                    e_k = round(s_k + 0.1, 2)
+                p["start"] = s_k
+                p["end"] = e_k
+                p["duration"] = round(e_k - s_k, 2)
+
+    # Final pass: reconstruct list ordered by original clip index
+    results = [placements_by_orig_idx[i] for i in range(num_clips)]
+    return results
+
+
 def search_pixabay_videos(
     query: str,
     api_key: Optional[str] = None,
