@@ -40,16 +40,36 @@ def render_export_page():
                 <div style="font-size: 40px; margin-bottom: 12px;">🎬</div>
                 <div style="font-size: 1.1rem; font-weight: 600; color: #ffffff;">No Processed Video Available</div>
                 <p style="font-size: 0.85rem; color: #8b90a7; max-width: 460px; margin: 8px auto 20px auto;">
-                    Please go to the <b>Editor</b> tab, upload a video, configure your background effect, and click <b>Process Video</b>.
+                    Please go to the <b>Editor</b> tab or <b>AI B-roll</b> tab, upload or process a video, and render your output.
                 </p>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        if st.button("← Return to Editor", type="primary"):
-            st.session_state.current_page = "editor"
-            st.rerun()
+        col_ret1, col_ret2 = st.columns(2)
+        with col_ret1:
+            if st.button("← Return to Editor", key="export_no_proc_editor_btn", type="primary", use_container_width=True):
+                st.session_state.current_page = "editor"
+                st.rerun()
+        with col_ret2:
+            if st.button("← Return to AI B-roll", key="export_no_proc_broll_btn", type="secondary", use_container_width=True):
+                st.session_state.current_page = "broll"
+                st.rerun()
         return
+
+    if st.session_state.get("broll_generation_success"):
+        st.markdown(
+            """
+            <div class="status-banner-card" style="margin-bottom: 20px; padding: 12px 16px; border-left: 4px solid #10b981;">
+                <div class="status-banner-icon" style="color: #10b981; font-weight: bold; width: 26px; height: 26px; font-size: 14px;">✓</div>
+                <div>
+                    <div class="status-banner-title" style="color: #ffffff; font-weight: 600; font-size: 0.90rem;">B-roll Video Generated Successfully!</div>
+                    <div class="status-banner-desc" style="color: #9ca3af; font-size: 0.78rem;">Your selected stock footage cutaways have been placed onto the timeline. Review the preview and download your video below.</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     proc_path = Path(processed_path_str)
     file_size_mb = proc_path.stat().st_size / (1024 * 1024)
@@ -133,3 +153,14 @@ def render_export_page():
             use_container_width=True,
             key="export_page_download_btn",
         )
+
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        col_nav1, col_nav2 = st.columns(2)
+        with col_nav1:
+            if st.button("← AI B-roll", key="export_return_broll_btn", use_container_width=True):
+                st.session_state.current_page = "broll"
+                st.rerun()
+        with col_nav2:
+            if st.button("← Main Editor", key="export_return_editor_btn", use_container_width=True):
+                st.session_state.current_page = "editor"
+                st.rerun()

@@ -15,6 +15,8 @@ from core.stock import (
     calculate_timeline_percentages,
     format_duration,
 )
+from core.pipeline import compose_broll_video
+from app.ui.state import AppState, set_state
 
 
 def save_broll_upload(uploaded_file, temp_dir: Path) -> Path:
@@ -167,6 +169,9 @@ def render_broll_page(temp_dir: Path = None):
         st.session_state.broll_stock_video_id = None
         st.session_state.broll_stock_error = None
         st.session_state.broll_selected_clip = None
+        st.session_state.broll_generation_error = None
+        st.session_state.broll_generation_success = False
+        st.session_state.broll_is_generating = False
     cached_keywords_video_id = st.session_state.get("broll_keywords_video_id")
     if cached_keywords_video_id and cached_keywords_video_id != current_video_id:
         st.session_state.broll_keywords = None
@@ -176,12 +181,18 @@ def render_broll_page(temp_dir: Path = None):
         st.session_state.broll_stock_video_id = None
         st.session_state.broll_stock_error = None
         st.session_state.broll_selected_clip = None
+        st.session_state.broll_generation_error = None
+        st.session_state.broll_generation_success = False
+        st.session_state.broll_is_generating = False
     cached_stock_video_id = st.session_state.get("broll_stock_video_id")
     if cached_stock_video_id and cached_stock_video_id != current_video_id:
         st.session_state.broll_stock_results = None
         st.session_state.broll_stock_video_id = None
         st.session_state.broll_stock_error = None
         st.session_state.broll_selected_clip = None
+        st.session_state.broll_generation_error = None
+        st.session_state.broll_generation_success = False
+        st.session_state.broll_is_generating = False
     if current_video_id and st.session_state.get("broll_transcription_error") == "Please select or upload a video before creating a transcript.":
         st.session_state.broll_transcription_error = None
     if st.session_state.get("broll_transcript") and st.session_state.get("broll_keywords_error") == "Please generate a video transcript before generating keywords.":
@@ -890,25 +901,297 @@ def render_broll_page(temp_dir: Path = None):
     # -------------------------------------------------------------------------
     # CARD 4: B-roll Placement & Timeline
     # -------------------------------------------------------------------------
-    st.markdown(
-        """
-        <div class="editor-card">
-            <div class="editor-card-header">
-                <div class="card-title-group">
+    with st.container(key="broll_placement_card", border=True):
+        c4_head_col1, c4_head_col2 = st.columns([0.76, 0.24])
+        with c4_head_col1:
+            st.markdown(
+                """
+                <div class="card-title-group" style="display: flex; align-items: center; min-height: 38px;">
                     <div class="card-step-badge">4</div>
                     <div class="card-title-text">B-roll Placement & Timeline</div>
                 </div>
-                <span style="font-size: 0.72rem; padding: 3px 8px; border-radius: 6px; background: rgba(124, 92, 252, 0.15); color: #a78bfa; border: 1px solid rgba(124, 92, 252, 0.3);">Planned: FFmpeg Overlay</span>
-            </div>
-            <p style="font-size: 0.82rem; color: #8b90a7; margin-bottom: 14px;">
-                Position selected stock clips at specific start, middle, or end timestamps.
+                """,
+                unsafe_allow_html=True,
+            )
+        with c4_head_col2:
+            generate_video_clicked = st.button(
+                "Generate Video",
+                key="broll_generate_video_btn",
+                type="primary",
+                use_container_width=True,
+                disabled=bool(
+                    not selected_clip
+                    or not current_broll_video
+                    or st.session_state.get("broll_is_generating", False)
+                ),
+            )
+
+        st.markdown(
+            """
+            <p style="font-size: 0.82rem; color: #8b90a7; margin-top: 4px; margin-bottom: 14px;">
+                Review selected stock footage and position cutaways on the video timeline before generating your final video.
             </p>
-            <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 26px 20px; text-align: center;">
-                <div style="font-size: 28px; margin-bottom: 8px;">⏱️</div>
-                <div style="font-size: 0.88rem; font-weight: 500; color: #d1d5db;">Timeline Editor Ready</div>
-                <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Multi-track visual timeline and overlay preview will render here.</div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            """,
+            unsafe_allow_html=True,
+        )
+
+        gen_error = st.session_state.get("broll_generation_error")
+        if gen_error:
+            safe_err = html.escape(str(gen_error))
+            st.markdown(
+                f"""
+                <div class="status-banner-card" style="margin-top: 4px; margin-bottom: 12px; padding: 10px 14px; border-left: 4px solid #ef4444;">
+                    <div class="status-banner-icon" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; width: 26px; height: 26px; font-size: 14px;">✕</div>
+                    <div>
+                        <div class="status-banner-title" style="color: #ef4444; font-size: 0.84rem;">Video Generation Error</div>
+                        <div class="status-banner-desc" style="font-size: 0.73rem;">{safe_err}</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        if not selected_clip:
+            st.markdown(
+                """
+                <div style="background: #10121c; border: 1px dashed #282d44; border-radius: 10px; padding: 26px 20px; text-align: center; margin-top: 6px; margin-bottom: 10px;">
+                    <div style="font-size: 28px; margin-bottom: 8px;">⏱️</div>
+                    <div style="font-size: 0.88rem; font-weight: 500; color: #d1d5db;">No Stock Footage Selected</div>
+                    <div style="font-size: 0.75rem; color: #6b7280; margin-top: 4px;">Click <b>Select Clip</b> on any footage in Step 3 (Stock Footage Search) to review and configure its B-roll timeline placement.</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            clip_id = selected_clip.get("id") or "clip"
+            clip_kw = str(selected_clip.get("keyword", "")).strip()
+            clip_dur = float(selected_clip.get("duration", 0.0) or 0.0)
+            clip_res = selected_clip.get("resolution", "HD")
+            clip_thumb = selected_clip.get("thumbnail_url", "")
+            clip_tags = selected_clip.get("tags", "")
+
+            # Match with transcript
+            match = match_clip_to_transcript(clip_kw, transcript)
+            if match:
+                def_start = round(float(match["start"]), 2)
+                def_end = round(float(match["end"]), 2)
+                seg_idx = match["segment_index"]
+                seg_text = match["text"]
+                col_scheme = get_segment_color(seg_idx)
+            else:
+                def_start = 0.0
+                fallback_len = clip_dur if clip_dur > 0 else 5.0
+                def_end = round(min(total_video_duration if total_video_duration > 0 else 5.0, fallback_len), 2)
+                seg_idx = 0
+                seg_text = "No direct transcript segment match"
+                col_scheme = get_segment_color(0)
+
+            start_state_key = f"broll_time_start_{clip_id}"
+            end_state_key = f"broll_time_end_{clip_id}"
+            if start_state_key not in st.session_state:
+                st.session_state[start_state_key] = float(def_start)
+            if end_state_key not in st.session_state:
+                st.session_state[end_state_key] = float(def_end)
+
+            rev_col1, rev_col2 = st.columns([0.42, 0.58], gap="medium")
+
+            with rev_col1:
+                thumb_markup = ""
+                if clip_thumb:
+                    safe_thumb_url = html.escape(clip_thumb)
+                    safe_res_label = html.escape(clip_res)
+                    safe_dur_label = html.escape(format_duration(clip_dur))
+                    thumb_markup = (
+                        f'<div class="stock-card-thumb-wrap" style="height: 140px; margin-bottom: 8px;">'
+                        f'<img src="{safe_thumb_url}" alt="Selected Clip" style="width: 100%; height: 100%; object-fit: cover; border-radius: 6px;" />'
+                        f'<span class="stock-badge-res">{safe_res_label}</span>'
+                        f'<span class="stock-badge-duration">{safe_dur_label}</span>'
+                        f'</div>'
+                    )
+                safe_kw = html.escape(clip_kw)
+                safe_tags = html.escape(str(clip_tags))
+                st.markdown(
+                    f"""
+                    <div style="background: #0d0f17; border: 1px solid #1f2336; border-radius: 10px; padding: 12px 14px;">
+                        {thumb_markup}
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <span style="font-size: 0.82rem; font-weight: 600; color: #a78bfa;">🔍 {safe_kw}</span>
+                            <span style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; color: #34d399; font-size: 0.68rem; font-weight: 700; padding: 2px 6px; border-radius: 4px;">SELECTED</span>
+                        </div>
+                        <div style="font-size: 0.72rem; color: #8b90a7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{safe_tags}">{safe_tags}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                if selected_clip.get("preview_url"):
+                    with st.expander("▶ Preview Selected Stock Video", expanded=False):
+                        st.video(selected_clip["preview_url"])
+
+                if st.button("✕ Change / Remove Selection", key="broll_remove_selected_clip_btn", use_container_width=True):
+                    st.session_state.broll_selected_clip = None
+                    st.session_state.broll_generation_error = None
+                    st.rerun()
+
+            with rev_col2:
+                seg_badge = f"Segment #{seg_idx + 1}" if match else "Custom Placement"
+                safe_seg_text = html.escape(seg_text)
+                st.markdown(
+                    f"""
+                    <div style="background: #0d0f17; border: 1px solid #1f2336; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span style="font-size: 0.78rem; font-weight: 600; color: #ffffff;">Target Transcript Context</span>
+                            <span style="background: {col_scheme['bg']}; border: 1px solid {col_scheme['border']}; color: {col_scheme['light']}; font-size: 0.68rem; padding: 2px 7px; border-radius: 4px; font-weight: 600;">{seg_badge}</span>
+                        </div>
+                        <div style="font-size: 0.77rem; color: #d1d5db; font-style: italic; line-height: 1.35; background: #12141e; border: 1px solid #1e2235; border-radius: 6px; padding: 8px 10px;">
+                            "{safe_seg_text}"
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                max_upper = max(total_video_duration, 3600.0) if total_video_duration > 0 else 3600.0
+                curr_start_val = float(st.session_state.get(start_state_key, def_start))
+                curr_end_val = float(st.session_state.get(end_state_key, def_end))
+
+                input_col_a, input_col_b = st.columns(2)
+                with input_col_a:
+                    new_start = st.number_input(
+                        "Start Timestamp (seconds)",
+                        min_value=0.0,
+                        max_value=max(0.0, max_upper - 0.1),
+                        value=float(min(curr_start_val, max_upper - 0.1)),
+                        step=0.5,
+                        format="%.2f",
+                        key=f"broll_num_start_{clip_id}",
+                    )
+                with input_col_b:
+                    new_end = st.number_input(
+                        "End Timestamp (seconds)",
+                        min_value=0.1,
+                        max_value=max_upper,
+                        value=float(min(max(curr_end_val, 0.1), max_upper)),
+                        step=0.5,
+                        format="%.2f",
+                        key=f"broll_num_end_{clip_id}",
+                    )
+
+                st.session_state[start_state_key] = new_start
+                st.session_state[end_state_key] = new_end
+
+                placement_duration = max(0.0, new_end - new_start)
+                if new_start >= new_end:
+                    st.warning("⚠️ Start timestamp must be strictly before End timestamp.")
+                else:
+                    start_str = format_duration(new_start)
+                    end_str = format_duration(new_end)
+                    st.markdown(
+                        f"""
+                        <div style="display: flex; justify-content: space-between; font-size: 0.76rem; color: #a78bfa; font-family: monospace; padding: 4px 2px;">
+                            <span>⏱️ Placement: {start_str} → {end_str}</span>
+                            <span>Duration: {placement_duration:.1f}s</span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+            if total_video_duration > 0:
+                l_pct, w_pct = calculate_timeline_percentages(
+                    st.session_state[start_state_key],
+                    st.session_state[end_state_key],
+                    total_video_duration,
+                )
+                start_str = format_duration(st.session_state[start_state_key])
+                end_str = format_duration(st.session_state[end_state_key])
+                total_str = format_duration(total_video_duration)
+                p_range_str = f"{start_str} - {end_str}"
+                timeline_preview_html = (
+                    f'<div style="background: #0d0f17; border: 1px solid #1f2336; border-radius: 10px; padding: 12px 14px; margin-top: 10px; margin-bottom: 12px;">'
+                    f'<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">'
+                    f'<span style="font-size: 0.78rem; font-weight: 600; color: #ffffff;">Proposed Timeline Placement</span>'
+                    f'<span style="font-size: 0.72rem; color: {col_scheme["light"]}; font-family: monospace; font-weight: 600;">{p_range_str} ({placement_duration:.1f}s)</span>'
+                    f'</div>'
+                    f'<div style="position: relative; width: 100%; height: 18px; background: #161825; border: 1px solid #252a3f; border-radius: 6px; overflow: hidden; margin-bottom: 4px;">'
+                    f'<div style="position: absolute; left: {l_pct}%; width: {w_pct}%; height: 100%; background: {col_scheme["primary"]}; opacity: 0.90; '
+                    f'display: flex; align-items: center; justify-content: center; font-size: 0.65rem; color: #ffffff; font-weight: 700;">'
+                    f'Clip #{clip_id}</div>'
+                    f'</div>'
+                    f'<div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: #6b7280; font-family: monospace;">'
+                    f'<span>00:00</span>'
+                    f'<span>{total_str}</span>'
+                    f'</div>'
+                    f'</div>'
+                )
+                st.markdown(timeline_preview_html, unsafe_allow_html=True)
+
+            if generate_video_clicked:
+                final_start = float(st.session_state[start_state_key])
+                final_end = float(st.session_state[end_state_key])
+
+                if final_start >= final_end:
+                    st.session_state.broll_generation_error = "Start timestamp must be strictly before End timestamp."
+                    st.rerun()
+
+                if not current_broll_video or not Path(current_broll_video).exists():
+                    st.session_state.broll_generation_error = "Target input video is missing or invalid. Please upload or select a video."
+                    st.rerun()
+
+                st.session_state.broll_is_generating = True
+                st.session_state.broll_generation_error = None
+
+                if st.session_state.get("app_state") == AppState.IDLE:
+                    set_state(AppState.UPLOADED)
+                set_state(AppState.PROCESSING)
+
+                progress_bar = st.progress(0.0)
+                status_box = st.empty()
+
+                def update_gen_progress(ratio: float, msg: str):
+                    progress_bar.progress(min(max(0.0, float(ratio)), 1.0))
+                    safe_msg = html.escape(msg)
+                    status_box.markdown(
+                        f"""
+                        <div style="font-size: 0.80rem; color: #a78bfa; font-weight: 500; margin-top: 4px;">
+                            ⏳ {safe_msg}
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                try:
+                    out_filename = generate_safe_filename(f"broll_{Path(current_broll_video).stem}.mp4")
+                    output_file_path = temp_dir / out_filename
+                    placements_payload = [{
+                        "clip": selected_clip,
+                        "start": final_start,
+                        "end": final_end,
+                    }]
+
+                    rendered_output = compose_broll_video(
+                        original_video_path=Path(current_broll_video),
+                        broll_placements=placements_payload,
+                        output_path=output_file_path,
+                        temp_dir=temp_dir,
+                        progress_callback=update_gen_progress,
+                    )
+
+                    st.session_state.processed_video = str(rendered_output)
+                    st.session_state.video_metadata = get_video_metadata(rendered_output)
+                    st.session_state.broll_generation_success = True
+                    st.session_state.broll_generation_error = None
+                    st.session_state.broll_is_generating = False
+
+                    if "temp_files" not in st.session_state or not isinstance(st.session_state.temp_files, list):
+                        st.session_state.temp_files = []
+                    st.session_state.temp_files.append(str(rendered_output))
+
+                    set_state(AppState.COMPLETED)
+                    st.session_state.current_page = "export"
+                    st.rerun()
+
+                except Exception as e:
+                    st.session_state.broll_generation_error = str(e)
+                    st.session_state.broll_is_generating = False
+                    set_state(AppState.FAILED)
+                    st.rerun()
